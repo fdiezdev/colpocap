@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+.venv/
+venv/
+config/settings.json
+logs/*.log*
+output/videos/*
+output/dicom/*
+output/snapshots/*
+output/*.db*
+output/*.sqlite3*
+!logs/.gitkeep
+!output/videos/.gitkeep
+!output/dicom/.gitkeep
+!output/snapshots/.gitkeep

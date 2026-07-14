@@ -1,0 +1,30 @@
+{
+  "local_ae_title": "COLPOCAP_MVP",
+  "worklist": {
+    "ae_title": "WORKLIST_AE",
+    "host": "127.0.0.1",
+    "port": 104
+  },
+  "pacs": {
+    "ae_title": "PACS_AE",
+    "host": "127.0.0.1",
+    "port": 104
+  },
+  "video": {
+    "device_name": "",
+    "resolution": "1920x1080",
+    "fps": 30,
+    "bitrate": "8M"
+  },
+  "institution": {
+    "name": "Instituto de Diagnóstico por Imágenes",
+    "station_name": "COLPOSCOPY_CAPTURE_01",
+    "manufacturer": "Custom",
+    "manufacturer_model_name": "Colposcopy Capture MVP",
+    "software_version": "0.1.0"
+  },
+  "storage": {
+    "base_output_dir": "./output"
+  }
+}
+
