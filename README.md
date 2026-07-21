@@ -67,14 +67,14 @@ La aplicación carga `config/settings.json` por defecto. El repositorio entrega 
 {
   "local_ae_title": "COLPOCAP_MVP",
   "worklist": {
-    "ae_title": "WORKLIST_AE",
+    "ae_title": "COLPOCAP_WL",
     "host": "127.0.0.1",
-    "port": 104
+    "port": 11112
   },
   "pacs": {
-    "ae_title": "PACS_AE",
+    "ae_title": "ORTHANC",
     "host": "127.0.0.1",
-    "port": 104
+    "port": 4242
   },
   "video": {
     "device_name": "",
@@ -146,7 +146,65 @@ El PixelData DICOM no está comprimido. Como el snapshot operativo se extrae a J
 
 Estados principales: `SELECTED`, `RECORDING`, `RECORDED`, `SNAPSHOT_CREATED`, `DICOM_CREATED`, `SENT` y `FAILED`.
 
-## Prueba local con Orthanc
+## Servidor MWL local de desarrollo
+
+El repositorio incluye un servidor DICOM Modality Worklist de laboratorio. Su
+objetivo es probar exactamente el mismo C-FIND que después se dirigirá al MWL
+del instituto; no reemplaza al RIS/MWL institucional ni debe usarse con
+pacientes reales.
+
+En una primera ventana de PowerShell, con el entorno virtual activado, inicie el
+servidor:
+
+```powershell
+python -m app.dicom.mwl_server
+```
+
+Los parámetros predeterminados son:
+
+```text
+Called AE Title:  COLPOCAP_WL
+Calling AE permitido: COLPOCAP_MVP
+IP:               127.0.0.1
+Puerto:           11112
+Turnos:           config/mwl.sample.json
+```
+
+Configure `config/settings.json` con esos mismos valores en la sección
+`worklist`. En una segunda ventana ejecute la aplicación:
+
+```powershell
+python -m app.main
+```
+
+Pulse “Probar Worklist” y luego “Buscar”. Las entradas que usan
+`"scheduled_start_date": "TODAY"` adoptan automáticamente la fecha del día.
+El servidor vuelve a leer `config/mwl.sample.json` en cada C-FIND, por lo que
+los turnos se pueden editar sin reiniciarlo.
+
+También se puede probar directamente con el `findscu` instalado por
+`pynetdicom`:
+
+```powershell
+.\.venv\Scripts\findscu.exe -v -W -aet COLPOCAP_MVP -aec COLPOCAP_WL -k PatientID=PID-001 127.0.0.1 11112
+```
+
+Para usar otro archivo, puerto o AE Title:
+
+```powershell
+python -m app.dicom.mwl_server `
+  --data C:\ColpoCap\turnos-prueba.json `
+  --ae-title MWL_PRUEBA `
+  --port 11113 `
+  --allow-calling-ae COLPOCAP_MVP
+```
+
+El listener usa `127.0.0.1` de forma predeterminada para no exponer datos de
+prueba a la red. Cuando se integre con el instituto, no se inicia este servidor:
+se reemplazan `worklist.ae_title`, `worklist.host` y `worklist.port` por los
+datos entregados por el área de sistemas.
+
+## Prueba local con Orthanc como PACS
 
 Orthanc usa por defecto AE Title `ORTHANC`, puerto DICOM `4242` y HTTP `8042`, según su [documentación de configuración](https://orthanc.uclouvain.be/book/users/configuration.html). En Windows, la [guía oficial](https://orthanc.uclouvain.be/book/users/quick-start-windows.html) explica el instalador y la ubicación de los archivos de configuración.
 
@@ -183,29 +241,15 @@ Después:
 3. complete el flujo y envíe la imagen;
 4. verifique paciente, estudio, serie e instancia en Orthanc, especialmente PatientID, AccessionNumber y StudyInstanceUID.
 
-Orthanc base sirve para C-STORE, pero MWL requiere su plugin. El [Worklists plugin oficial](https://orthanc.uclouvain.be/book/plugins/worklists-plugin-new.html) permite guardar worklists en SQLite y crearlas desde Orthanc Explorer 2 o REST. Una configuración de laboratorio típica es:
-
-```json
-{
-  "Plugins": ["OrthancExplorer2.dll", "OrthancWorklists.dll"],
-  "Worklists": {
-    "Enable": true,
-    "SaveInOrthancDatabase": true,
-    "FilterIssuerAet": false,
-    "SetStudyInstanceUidIfMissing": true
-  },
-  "DicomModalities": {
-    "colpocap": ["COLPOCAP_MVP", "127.0.0.1", 11112]
-  }
-}
-```
-
-Los nombres/rutas de DLL dependen del paquete instalado. Con el plugin activo, configure también `worklist.ae_title` como `ORTHANC`, host `127.0.0.1` y puerto `4242`, cree una worklist de prueba y consulte desde ColpoCap. El puerto `11112` de la modalidad declarada identifica a ColpoCap ante Orthanc; este MVP actúa como SCU y no abre allí un listener.
+Orthanc base se usa aquí solamente para C-ECHO y C-STORE. El servidor MWL de
+desarrollo se ejecuta por separado en el puerto `11112`. Esta separación replica
+mejor la instalación futura, donde el RIS/MWL y el PACS pueden tener AE Titles,
+direcciones y puertos distintos.
 
 ## Tests
 
 ```powershell
-pytest
+python -m pytest
 ```
 
 Los tests mínimos cubren:
@@ -213,6 +257,7 @@ Los tests mínimos cubren:
 - validez y no reutilización de UIDs;
 - esquema SQLite, claves foráneas, pendientes e historial de reintentos;
 - creación, relectura, metadata, transferencia y PixelData RGB del VL Endoscopic Image;
+- servidor MWL JSON, filtros, C-ECHO y C-FIND real de extremo a extremo;
 - garantía de que el camino de video DICOM no simula una implementación.
 
 Los tests no necesitan PACS ni capturadora. La prueba DICOM de integración con Orthanc y la prueba física de DirectShow son manuales.

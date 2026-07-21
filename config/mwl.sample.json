@@ -1,0 +1,38 @@
+[
+  {
+    "patient_name": "PRUEBA^ANA",
+    "patient_id": "PID-001",
+    "patient_birth_date": "19850312",
+    "patient_sex": "F",
+    "accession_number": "ACC-001",
+    "study_instance_uid": "1.2.826.0.1.3680043.8.498.1001",
+    "requested_procedure_id": "RP-001",
+    "requested_procedure_description": "COLPOSCOPIA",
+    "referring_physician_name": "MEDICO^REFERENTE",
+    "scheduled_station_ae_title": "COLPOCAP_MVP",
+    "scheduled_start_date": "TODAY",
+    "scheduled_start_time": "090000",
+    "modality": "ES",
+    "scheduled_performing_physician_name": "MEDICO^OPERADOR",
+    "scheduled_procedure_step_description": "COLPOSCOPIA PROGRAMADA",
+    "scheduled_procedure_step_id": "SPS-001"
+  },
+  {
+    "patient_name": "PRUEBA^BEATRIZ",
+    "patient_id": "PID-002",
+    "patient_birth_date": "19901125",
+    "patient_sex": "F",
+    "accession_number": "ACC-002",
+    "study_instance_uid": "",
+    "requested_procedure_id": "RP-002",
+    "requested_procedure_description": "CONTROL COLPOSCOPICO",
+    "referring_physician_name": "MEDICO^REFERENTE",
+    "scheduled_station_ae_title": "COLPOCAP_MVP",
+    "scheduled_start_date": "TODAY",
+    "scheduled_start_time": "093000",
+    "modality": "ES",
+    "scheduled_performing_physician_name": "MEDICO^OPERADOR",
+    "scheduled_procedure_step_description": "CONTROL PROGRAMADO",
+    "scheduled_procedure_step_id": "SPS-002"
+  }
+]

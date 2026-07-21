@@ -1,14 +1,14 @@
 {
   "local_ae_title": "COLPOCAP_MVP",
   "worklist": {
-    "ae_title": "WORKLIST_AE",
+    "ae_title": "COLPOCAP_WL",
     "host": "127.0.0.1",
-    "port": 104
+    "port": 11112
   },
   "pacs": {
-    "ae_title": "PACS_AE",
+    "ae_title": "ORTHANC",
     "host": "127.0.0.1",
-    "port": 104
+    "port": 4242
   },
   "video": {
     "device_name": "",
@@ -27,4 +27,3 @@
     "base_output_dir": "./output"
   }
 }
-
