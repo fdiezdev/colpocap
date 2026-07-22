@@ -1,15 +1,6 @@
-"""DICOM creation and networking clients."""
+"""DICOM creation, networking clients and development utilities.
 
-from .dicom_builder import DicomBuildResult, DicomBuilder
-from .store_client import StoreClient
-from .worklist_client import WorklistClient, WorklistItem, WorklistQuery
-
-__all__ = [
-    "DicomBuildResult",
-    "DicomBuilder",
-    "StoreClient",
-    "WorklistClient",
-    "WorklistItem",
-    "WorklistQuery",
-]
-
+Concrete modules are intentionally imported by their full path.  Keeping this
+package initializer lightweight lets tools such as the MWL server start without
+loading the image-building and desktop UI dependencies.
+"""

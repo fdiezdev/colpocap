@@ -66,6 +66,10 @@ class MainWindow(QMainWindow):
         self.settings = settings
         self.database = database
         self.thread_pool = QThreadPool.globalInstance()
+        # QRunnable is not a QObject and QThreadPool doesn't keep a Python
+        # reference alive for queued signal delivery. Retain workers until
+        # their finished signal has been handled by the UI thread.
+        self._active_workers: set[Worker] = set()
         self.selected_study: StudyRecord | None = None
         self.current_capture: CaptureRecord | None = None
 
@@ -177,15 +181,23 @@ class MainWindow(QMainWindow):
         on_error: Callable[[], None] | None = None,
     ) -> None:
         worker = Worker(function)
+        self._active_workers.add(worker)
         worker.signals.result.connect(on_result)
+
         def handle_error(message: str, trace: str) -> None:
             self._task_error(description, message, trace)
             if on_error:
                 on_error()
 
+        def handle_finished() -> None:
+            try:
+                if on_finished:
+                    on_finished()
+            finally:
+                self._active_workers.discard(worker)
+
         worker.signals.error.connect(handle_error)
-        if on_finished:
-            worker.signals.finished.connect(on_finished)
+        worker.signals.finished.connect(handle_finished)
         self.thread_pool.start(worker)
 
     def _task_error(self, description: str, message: str, trace: str) -> None:
@@ -195,27 +207,36 @@ class MainWindow(QMainWindow):
     def _test_worklist(self) -> None:
         self.worklist_test_button.setEnabled(False)
         self.worklist_status.setText("Probando…")
+        self.worklist_status.setStyleSheet("")
         self._run_async(
             self.worklist_client.echo,
             lambda result: self._show_echo(result, self.worklist_status),
             description="Prueba de Worklist",
             on_finished=lambda: self.worklist_test_button.setEnabled(True),
+            on_error=lambda: self._show_connection_error(self.worklist_status),
         )
 
     def _test_pacs(self) -> None:
         self.pacs_test_button.setEnabled(False)
         self.pacs_status.setText("Probando…")
+        self.pacs_status.setStyleSheet("")
         self._run_async(
             self.export_service.test_pacs,
             lambda result: self._show_echo(result, self.pacs_status),
             description="Prueba de PACS",
             on_finished=lambda: self.pacs_test_button.setEnabled(True),
+            on_error=lambda: self._show_connection_error(self.pacs_status),
         )
 
     @staticmethod
     def _show_echo(result: EchoResult, label: QLabel) -> None:
         label.setText(("Conectado: " if result.success else "Falló: ") + result.message)
         label.setStyleSheet("color: green" if result.success else "color: red")
+
+    @staticmethod
+    def _show_connection_error(label: QLabel) -> None:
+        label.setText("Error durante la prueba; revise el detalle mostrado")
+        label.setStyleSheet("color: red")
 
     def _search_worklist(self, query: WorklistQuery) -> None:
         self.worklist_view.set_busy(True)
@@ -389,7 +410,11 @@ class MainWindow(QMainWindow):
         text = QPlainTextEdit()
         text.setReadOnly(True)
         text.setPlainText(
-            "Comando:\n"
+            "Ejecutable seleccionado:\n"
+            + diagnostic.executable
+            + "\n\nVersión:\n"
+            + diagnostic.version
+            + "\n\nComando:\n"
             + " ".join(diagnostic.command)
             + "\n\nSalida:\n"
             + diagnostic.output

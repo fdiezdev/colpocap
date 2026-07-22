@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
-import shutil
 import subprocess
+
+from .ffmpeg_locator import FFmpegInstallation, FFmpegLocatorError, locate_ffmpeg
 
 LOGGER = logging.getLogger(__name__)
 
@@ -17,7 +17,16 @@ class SnapshotError(RuntimeError):
 
 class SnapshotManager:
     def __init__(self, executable: str | None = None) -> None:
-        self.executable = executable or os.environ.get("COLPOCAP_FFMPEG", "ffmpeg")
+        self.executable = executable
+        self._installation: FFmpegInstallation | None = None
+
+    def check_installed(self) -> Path:
+        if self._installation is None:
+            try:
+                self._installation = locate_ffmpeg(self.executable)
+            except FFmpegLocatorError as exc:
+                raise SnapshotError(str(exc)) from exc
+        return self._installation.executable
 
     def extract(
         self,
@@ -31,11 +40,10 @@ class SnapshotManager:
             raise SnapshotError(f"El MP4 no existe o está vacío: {video}")
         if timestamp_seconds < 0:
             raise SnapshotError("El timestamp del snapshot no puede ser negativo.")
-        if not shutil.which(self.executable):
-            raise SnapshotError("FFmpeg no está instalado o no está disponible en PATH.")
+        executable = self.check_installed()
         output.parent.mkdir(parents=True, exist_ok=True)
         command = [
-            self.executable,
+            str(executable),
             "-hide_banner",
             "-y",
             "-ss",
@@ -66,4 +74,3 @@ class SnapshotManager:
             )
         LOGGER.info("Snapshot creado: %s", output)
         return output
-

@@ -4,15 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-import os
 from pathlib import Path
 import platform
-import shutil
 import subprocess
 import time
 from typing import IO
 
 from app.config import VideoConfig
+from .ffmpeg_locator import FFmpegInstallation, FFmpegLocatorError, locate_ffmpeg
 
 LOGGER = logging.getLogger(__name__)
 
@@ -25,25 +24,27 @@ class FFmpegError(RuntimeError):
 class DeviceDiagnostic:
     command: tuple[str, ...]
     output: str
+    executable: str = ""
+    version: str = ""
 
 
 class FFmpegManager:
     def __init__(self, config: VideoConfig, executable: str | None = None) -> None:
         self.config = config
-        self.executable = executable or os.environ.get("COLPOCAP_FFMPEG", "ffmpeg")
+        self.executable = executable
+        self._installation: FFmpegInstallation | None = None
         self._process: subprocess.Popen[str] | None = None
         self._log_handle: IO[str] | None = None
         self._current_output: Path | None = None
         self._current_log: Path | None = None
 
     def check_installed(self) -> Path:
-        resolved = shutil.which(self.executable)
-        if not resolved:
-            raise FFmpegError(
-                "FFmpeg no está instalado o no está en PATH. También puede definir "
-                "la variable de entorno COLPOCAP_FFMPEG con la ruta al ejecutable."
-            )
-        return Path(resolved)
+        if self._installation is None:
+            try:
+                self._installation = locate_ffmpeg(self.executable)
+            except FFmpegLocatorError as exc:
+                raise FFmpegError(str(exc)) from exc
+        return self._installation.executable
 
     @property
     def is_recording(self) -> bool:
@@ -52,7 +53,7 @@ class FFmpegManager:
     def start_recording(self, output_path: str | Path) -> Path:
         if self.is_recording:
             raise FFmpegError("Ya existe una grabación FFmpeg en curso.")
-        self.check_installed()
+        executable = self.check_installed()
         if not self.config.device_name:
             raise FFmpegError(
                 "No se configuró video.device_name en config/settings.json."
@@ -60,7 +61,7 @@ class FFmpegManager:
 
         output = Path(output_path)
         output.parent.mkdir(parents=True, exist_ok=True)
-        command = self._capture_command(output)
+        command = self._capture_command(output, executable)
         log_path = output.with_suffix(".ffmpeg.log")
         self._log_handle = log_path.open("a", encoding="utf-8")
         creation_flags = (
@@ -140,11 +141,11 @@ class FFmpegManager:
         return output
 
     def list_video_devices(self) -> DeviceDiagnostic:
-        self.check_installed()
+        executable = self.check_installed()
         system = platform.system()
         if system == "Windows":
             command = [
-                self.executable,
+                str(executable),
                 "-hide_banner",
                 "-list_devices",
                 "true",
@@ -155,7 +156,7 @@ class FFmpegManager:
             ]
         elif system == "Darwin":
             command = [
-                self.executable,
+                str(executable),
                 "-hide_banner",
                 "-f",
                 "avfoundation",
@@ -165,7 +166,7 @@ class FFmpegManager:
                 "",
             ]
         else:
-            command = [self.executable, "-hide_banner", "-sources", "v4l2"]
+            command = [str(executable), "-hide_banner", "-sources", "v4l2"]
         completed = subprocess.run(
             command,
             capture_output=True,
@@ -177,9 +178,15 @@ class FFmpegManager:
         )
         output = (completed.stdout + "\n" + completed.stderr).strip()
         LOGGER.info("Diagnóstico de dispositivos FFmpeg ejecutado")
-        return DeviceDiagnostic(tuple(command), output)
+        installation = self._installation
+        return DeviceDiagnostic(
+            tuple(command),
+            output,
+            str(executable),
+            installation.version if installation is not None else "",
+        )
 
-    def _capture_command(self, output: Path) -> list[str]:
+    def _capture_command(self, output: Path, executable: Path) -> list[str]:
         common_output = [
             "-c:v",
             "libx264",
@@ -228,7 +235,7 @@ class FFmpegManager:
                 "-i",
                 self.config.device_name,
             ]
-        return [self.executable, "-hide_banner", *input_args, *common_output]
+        return [str(executable), "-hide_banner", *input_args, *common_output]
 
     def _close_log(self) -> None:
         if self._log_handle is not None:

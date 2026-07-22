@@ -32,7 +32,7 @@ No incluye autenticación, informes, firma, HL7, DICOMweb, preview en vivo, inst
 
 - Windows 10/11 para el destino inicial;
 - Python 3.11 o superior de 64 bits;
-- FFmpeg disponible en `PATH`;
+- FFmpeg x64 incluido en `third_party/ffmpeg/windows-x64` mediante el instalador del proyecto;
 - capturadora UVC/HDMI expuesta a FFmpeg/DirectShow;
 - conectividad TCP hacia MWL y PACS.
 
@@ -48,16 +48,35 @@ py -3.11 -m venv .venv
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 Copy-Item config\settings.example.json config\settings.json
+.\scripts\install_ffmpeg_windows.ps1
 ```
 
-Instale una compilación de FFmpeg desde la sección de Windows de [ffmpeg.org](https://ffmpeg.org/download.html), agregue su carpeta `bin` al `PATH` y verifique:
+El último comando descarga la versión de FFmpeg fijada por el proyecto, valida
+su checksum SHA-256 y comprueba que incluya DirectShow. El ejecutable queda en:
 
 ```powershell
-ffmpeg -version
-ffmpeg -hide_banner -list_devices true -f dshow -i dummy
+.\third_party\ffmpeg\windows-x64\ffmpeg.exe
 ```
 
-Copie exactamente el nombre de la entrada de video mostrada por FFmpeg a `video.device_name`. La aplicación ofrece el mismo diagnóstico desde “Listar dispositivos de video”. Si no es posible modificar `PATH`, defina `COLPOCAP_FFMPEG` con la ruta completa a `ffmpeg.exe` antes de iniciar la aplicación.
+No es necesario agregarlo al `PATH`. ColpoCap elige primero una ruta explícita,
+luego `COLPOCAP_FFMPEG`, después el binario incluido y, solamente si este no
+existe, intenta usar el `PATH` del sistema. Tanto la grabación como la creación
+de snapshots comparten este mismo mecanismo.
+
+Para listar la cámara y verificar qué nombre debe copiarse exactamente a
+`video.device_name`, ejecute la aplicación y use “Listar dispositivos de video”.
+El diálogo muestra el ejecutable y la versión seleccionados, el comando y toda
+la salida de DirectShow. También puede ejecutar manualmente:
+
+```powershell
+& .\third_party\ffmpeg\windows-x64\ffmpeg.exe -hide_banner -list_devices true -f dshow -i dummy
+```
+
+Si ya existe un binario en la carpeta y necesita reinstalarlo:
+
+```powershell
+.\scripts\install_ffmpeg_windows.ps1 -Force
+```
 
 ## Configuración
 
@@ -281,6 +300,7 @@ app/
 │   └── uid.py
 ├── video/
 │   ├── capture_manager.py
+│   ├── ffmpeg_locator.py
 │   ├── ffmpeg_manager.py
 │   └── snapshot_manager.py
 ├── db/
@@ -294,6 +314,11 @@ tests/
 ├── test_database.py
 ├── test_dicom_builder.py
 └── test_dicom_networking.py
+scripts/
+└── install_ffmpeg_windows.ps1
+third_party/ffmpeg/windows-x64/
+├── README.md
+└── ffmpeg.exe                   # instalado localmente; no versionado en Git
 ```
 
 ## Limitaciones técnicas

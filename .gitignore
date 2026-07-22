@@ -11,7 +11,9 @@ output/dicom/*
 output/snapshots/*
 output/*.db*
 output/*.sqlite3*
+third_party/ffmpeg/windows-x64/*
 !logs/.gitkeep
 !output/videos/.gitkeep
 !output/dicom/.gitkeep
 !output/snapshots/.gitkeep
+!third_party/ffmpeg/windows-x64/README.md
