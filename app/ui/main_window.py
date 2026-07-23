@@ -88,6 +88,9 @@ class MainWindow(QMainWindow):
         self.selected_study: StudyRecord | None = None
         self.current_capture: CaptureRecord | None = None
         self._capture_busy = False
+        self._console_lines: list[str] = []
+        self._console_dialog: QDialog | None = None
+        self._console_text: QPlainTextEdit | None = None
 
         self._configure_services(settings)
         self.setWindowTitle("ElectroCap - Captura colposcópica DICOM")
@@ -248,6 +251,7 @@ class MainWindow(QMainWindow):
         )
         self.configuration_view.test_pacs_requested.connect(self._test_pacs)
         self.configuration_view.devices_requested.connect(self._diagnose_devices)
+        self.configuration_view.console_requested.connect(self._show_console)
         self.worklist_view.search_requested.connect(self._search_worklist)
         self.worklist_view.selection_requested.connect(self._select_study)
         self.worklist_view.manual_patient_added.connect(
@@ -259,10 +263,7 @@ class MainWindow(QMainWindow):
         self.capture_view.back_requested.connect(self._show_worklist)
         self.capture_view.start_requested.connect(self._start_recording)
         self.capture_view.snapshot_requested.connect(self._create_live_snapshot)
-        self.capture_view.finish_requested.connect(self._finish_and_send)
-        self.capture_view.local_export_requested.connect(
-            self._finish_and_export_local
-        )
+        self.capture_view.finish_requested.connect(self._show_finish_options)
         self.retry_button.clicked.connect(self._retry_selected)
         self.export_pending_button.clicked.connect(self._export_pending_selected)
         self.refresh_pending_button.clicked.connect(self.refresh_pending)
@@ -271,7 +272,7 @@ class MainWindow(QMainWindow):
         self._preview_bridge = PreviewBridge()
         self._preview_bridge.frame.connect(self.capture_view.show_preview_frame)
         self._log_bridge = LogBridge()
-        self._log_bridge.message.connect(self.capture_view.append_log)
+        self._log_bridge.message.connect(self._append_console_log)
         self._ui_log_handler = QtLogHandler(self._log_bridge)
         self._ui_log_handler.setFormatter(
             logging.Formatter("%(asctime)s | %(levelname)s | %(message)s", "%H:%M:%S")
@@ -470,6 +471,54 @@ class MainWindow(QMainWindow):
         self._capture_busy = False
         self._sync_capture_state()
 
+    def _show_finish_options(self) -> None:
+        if self.current_capture is None:
+            return
+
+        export_dicom_result = 2
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Finalizar estudio")
+        dialog.setModal(True)
+        dialog.setMinimumWidth(520)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(24, 22, 24, 22)
+        layout.setSpacing(16)
+
+        title = QLabel("Seleccione el destino del estudio")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+        explanation = QLabel(
+            "La grabación se detendrá y se generarán las imágenes DICOM. Luego puede "
+            "enviarlas al PACS o guardarlas en una carpeta o unidad extraíble."
+        )
+        explanation.setObjectName("supportingText")
+        explanation.setWordWrap(True)
+        layout.addWidget(explanation)
+
+        pacs_button = QPushButton("Enviar al PACS")
+        pacs_button.setObjectName("primaryButton")
+        pacs_button.setMinimumHeight(48)
+        pacs_button.clicked.connect(dialog.accept)
+        layout.addWidget(pacs_button)
+
+        export_button = QPushButton("Exportar DICOM")
+        export_button.setObjectName("secondaryButton")
+        export_button.setMinimumHeight(48)
+        export_button.clicked.connect(
+            lambda: dialog.done(export_dicom_result)
+        )
+        layout.addWidget(export_button)
+
+        cancel_button = QPushButton("Cancelar")
+        cancel_button.clicked.connect(dialog.reject)
+        layout.addWidget(cancel_button)
+
+        result = dialog.exec()
+        if result == QDialog.Accepted:
+            self._finish_and_send()
+        elif result == export_dicom_result:
+            self._finish_and_export_local()
+
     def _finish_and_send(self) -> None:
         if self.current_capture is None:
             return
@@ -604,6 +653,48 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             f"Estudio exportado en {outcome.directory}", 10000
         )
+
+    def _append_console_log(self, message: str) -> None:
+        self._console_lines.append(message)
+        if len(self._console_lines) > 2000:
+            del self._console_lines[: len(self._console_lines) - 2000]
+        if self._console_text is not None:
+            self._console_text.appendPlainText(message)
+
+    def _show_console(self) -> None:
+        if self._console_dialog is None:
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Consola técnica")
+            dialog.resize(920, 560)
+            layout = QVBoxLayout(dialog)
+            layout.setContentsMargins(20, 18, 20, 18)
+            layout.setSpacing(12)
+
+            explanation = QLabel(
+                "Registro técnico de conexiones, captura y exportación. Esta "
+                "información está destinada a soporte y diagnóstico."
+            )
+            explanation.setObjectName("supportingText")
+            explanation.setWordWrap(True)
+            layout.addWidget(explanation)
+
+            text = QPlainTextEdit()
+            text.setReadOnly(True)
+            text.setLineWrapMode(QPlainTextEdit.NoWrap)
+            text.document().setMaximumBlockCount(2000)
+            text.setPlainText("\n".join(self._console_lines))
+            layout.addWidget(text, 1)
+
+            buttons = QDialogButtonBox(QDialogButtonBox.Close)
+            buttons.rejected.connect(dialog.hide)
+            layout.addWidget(buttons)
+
+            self._console_dialog = dialog
+            self._console_text = text
+
+        self._console_dialog.show()
+        self._console_dialog.raise_()
+        self._console_dialog.activateWindow()
 
     def _selected_pending_capture_id(self, title: str) -> int | None:
         row = self.pending_table.currentRow()

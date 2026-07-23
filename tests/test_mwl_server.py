@@ -30,7 +30,7 @@ def write_worklists(path: Path) -> None:
                     "requested_procedure_id": "RP-001",
                     "requested_procedure_description": "COLPOSCOPIA",
                     "referring_physician_name": "DOCTOR^TEST",
-                    "scheduled_station_ae_title": "ELECTROCAP",
+                    "scheduled_station_ae_title": "COLPOCAP_MVP",
                     "scheduled_start_date": "TODAY",
                     "scheduled_start_time": "090000",
                     "modality": "ES",
@@ -42,7 +42,7 @@ def write_worklists(path: Path) -> None:
                     "patient_name": "TEST^BEA",
                     "patient_id": "PID-002",
                     "accession_number": "ACC-002",
-                    "scheduled_station_ae_title": "ELECTROCAP",
+                    "scheduled_station_ae_title": "COLPOCAP_MVP",
                     "scheduled_start_date": "20260115",
                     "scheduled_start_time": "100000",
                     "modality": "ES",
@@ -70,6 +70,16 @@ def test_repository_expands_today_and_validates_entries(tmp_path: Path) -> None:
     path.write_text("{}", encoding="utf-8")
     with pytest.raises(WorklistDataError, match="lista JSON"):
         JsonWorklistRepository(path).load()
+
+
+def test_development_server_preserves_existing_ae_titles(tmp_path: Path) -> None:
+    path = tmp_path / "mwl.json"
+    write_worklists(path)
+
+    server = MwlServer(JsonWorklistRepository(path))
+
+    assert server.ae_title == "COLPOCAP_WL"
+    assert server.allowed_calling_aes == ("COLPOCAP_MVP",)
 
 
 def test_matching_supports_wildcards_and_date_ranges(tmp_path: Path) -> None:
@@ -101,8 +111,8 @@ def test_server_answers_real_echo_and_mwl_find(tmp_path: Path) -> None:
         except PermissionError:
             pytest.skip("El sandbox no permite abrir un listener DICOM local")
 
-        endpoint = DicomEndpointConfig("ELECTROCAP_WL", "127.0.0.1", server.bound_port)
-        client = WorklistClient("ELECTROCAP", endpoint)
+        endpoint = DicomEndpointConfig("COLPOCAP_WL", "127.0.0.1", server.bound_port)
+        client = WorklistClient("COLPOCAP_MVP", endpoint)
 
         assert client.echo().success
         results = client.find(

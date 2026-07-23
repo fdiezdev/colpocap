@@ -93,9 +93,9 @@ La aplicación carga `config/settings.json` por defecto. El repositorio entrega 
 
 ```json
 {
-  "local_ae_title": "ELECTROCAP",
+  "local_ae_title": "COLPOCAP_MVP",
   "worklist": {
-    "ae_title": "ELECTROCAP_WL",
+    "ae_title": "COLPOCAP_WL",
     "host": "127.0.0.1",
     "port": 11112
   },
@@ -112,7 +112,7 @@ La aplicación carga `config/settings.json` por defecto. El repositorio entrega 
   },
   "institution": {
     "name": "Instituto de Diagnóstico por Imágenes",
-    "station_name": "ELECTROCAP",
+    "station_name": "COLPO_CAPTURE_01",
     "manufacturer": "Custom",
     "manufacturer_model_name": "ElectroCap",
     "software_version": "1.0.0"
@@ -123,7 +123,11 @@ La aplicación carga `config/settings.json` por defecto. El repositorio entrega 
 }
 ```
 
-Las rutas relativas de almacenamiento se resuelven respecto de la raíz del proyecto. No hay AE Titles, hosts, puertos, directorios clínicos ni dispositivos embebidos en el código. Los AE Titles se validan a un máximo de 16 caracteres.
+Las rutas relativas de almacenamiento se resuelven respecto de la raíz del
+proyecto. Los AE Titles se validan a un máximo de 16 caracteres. Los
+identificadores técnicos `COLPOCAP_MVP` y `COLPOCAP_WL` se conservan para no
+romper asociaciones DICOM ya configuradas; no forman parte de la marca visible
+ElectroCap y solamente deben cambiarse en coordinación con Worklist y PACS.
 
 `StationName` tiene VR DICOM SH y admite un máximo de 16 caracteres.
 
@@ -145,6 +149,12 @@ Se recomienda un PNG horizontal con fondo transparente y al menos 960 × 290
 píxeles. Al reemplazar o agregar el archivo, reinicie la aplicación. Si no está
 disponible, la interfaz muestra el nombre ElectroCap como respaldo.
 
+El ícono de ventana y barra de tareas se carga desde
+`assets/electrocap_icon.png`. Para un ejecutable de Windows se recomienda además
+`assets/electrocap_icon.ico` y pasarlo al empaquetador, por ejemplo con
+`pyinstaller --icon assets/electrocap_icon.ico`. Consulte
+`assets/README.md` para tamaños y formatos recomendados.
+
 ## Ejecución y operación
 
 ```powershell
@@ -157,10 +167,13 @@ python -m app.main
 4. Verifique una fila y pulse “Iniciar estudio seleccionado”.
 5. En la pantalla de captura, pulse “Iniciar estudio y cámara”.
 6. Cuando aparezca el video en vivo, pulse “Capturar snapshot” tantas veces como sea necesario. La galería confirma cada imagen.
-7. Use “Finalizar y enviar al PACS” para el flujo conectado o “Finalizar y exportar DICOM” para elegir una carpeta o unidad extraíble. ElectroCap crea una subcarpeta por estudio y copia todas las instancias como `IM_0001.dcm`, `IM_0002.dcm` y sucesivas.
+7. Pulse “Finalizar estudio” y elija en la ventana si desea enviar al PACS o exportar DICOM a una carpeta o unidad extraíble. ElectroCap crea una subcarpeta por estudio y copia todas las instancias como `IM_0001.dcm`, `IM_0002.dcm` y sucesivas.
 8. Un envío fallido o parcial aparece en el menú principal. Desde allí puede reintentarse o exportarse a una carpeta sin reenviar las instancias ya aceptadas.
 
 La UI impide iniciar sin estudio, capturar antes de recibir un frame y finalizar sin snapshots. Si la Worklist no entrega StudyInstanceUID, se genera uno y queda registrado localmente antes de capturar. Cada estudio usa un SeriesInstanceUID común y un SOPInstanceUID nuevo por snapshot.
+
+La consola de diagnóstico no aparece durante el estudio. Está disponible en
+Configuración mediante “Ver consola técnica”.
 
 ## Archivos y trazabilidad
 
@@ -205,8 +218,8 @@ python -m app.dicom.mwl_server
 Los parámetros predeterminados son:
 
 ```text
-Called AE Title:  ELECTROCAP_WL
-Calling AE permitido: ELECTROCAP
+Called AE Title:  COLPOCAP_WL
+Calling AE permitido: COLPOCAP_MVP
 IP:               127.0.0.1
 Puerto:           11112
 Turnos:           config/mwl.sample.json
@@ -228,7 +241,7 @@ También se puede probar directamente con el `findscu` instalado por
 `pynetdicom`:
 
 ```powershell
-.\.venv\Scripts\findscu.exe -v -W -aet ELECTROCAP -aec ELECTROCAP_WL -k PatientID=PID-001 127.0.0.1 11112
+.\.venv\Scripts\findscu.exe -v -W -aet COLPOCAP_MVP -aec COLPOCAP_WL -k PatientID=PID-001 127.0.0.1 11112
 ```
 
 Para usar otro archivo, puerto o AE Title:
@@ -238,7 +251,7 @@ python -m app.dicom.mwl_server `
   --data C:\ColpoCap\turnos-prueba.json `
   --ae-title MWL_PRUEBA `
   --port 11113 `
-  --allow-calling-ae ELECTROCAP
+  --allow-calling-ae COLPOCAP_MVP
 ```
 
 El listener usa `127.0.0.1` de forma predeterminada para no exponer datos de

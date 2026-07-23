@@ -41,7 +41,7 @@ def test_c_echo_c_store_and_mwl_c_find_roundtrip(tmp_path: Path) -> None:
         response.RequestedProcedureDescription = "COLPOSCOPIA"
         response.ReferringPhysicianName = "DOCTOR^TEST"
         step = Dataset()
-        step.ScheduledStationAETitle = "ELECTROCAP"
+        step.ScheduledStationAETitle = "COLPOCAP_MVP"
         step.ScheduledProcedureStepStartDate = "20260714"
         step.ScheduledProcedureStepStartTime = "120000"
         step.Modality = "ES"
@@ -89,13 +89,13 @@ def test_c_echo_c_store_and_mwl_c_find_roundtrip(tmp_path: Path) -> None:
             },
         )
 
-        store_client = StoreClient("ELECTROCAP", endpoint)
+        store_client = StoreClient("COLPOCAP_MVP", endpoint)
         assert store_client.echo().success
         store_result = store_client.store(dicom_path)
         assert store_result.success
         assert store_result.status_hex == "0x0000"
 
-        worklist_client = WorklistClient("ELECTROCAP", endpoint)
+        worklist_client = WorklistClient("COLPOCAP_MVP", endpoint)
         results = worklist_client.find(
             WorklistQuery(
                 scheduled_date="20260714",

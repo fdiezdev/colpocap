@@ -1,7 +1,7 @@
 {
-  "local_ae_title": "ELECTROCAP",
+  "local_ae_title": "COLPOCAP_MVP",
   "worklist": {
-    "ae_title": "ELECTROCAP_WL",
+    "ae_title": "COLPOCAP_WL",
     "host": "127.0.0.1",
     "port": 11112
   },
@@ -18,7 +18,7 @@
   },
   "institution": {
     "name": "Instituto de Diagnóstico por Imágenes",
-    "station_name": "ELECTROCAP",
+    "station_name": "COLPO_CAPTURE_01",
     "manufacturer": "Custom",
     "manufacturer_model_name": "ElectroCap",
     "software_version": "1.0.0"

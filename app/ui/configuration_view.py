@@ -24,6 +24,7 @@ class ConfigurationView(QWidget):
     test_worklist_requested = Signal()
     test_pacs_requested = Signal()
     devices_requested = Signal()
+    console_requested = Signal()
 
     def __init__(self, settings: Settings, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -106,6 +107,9 @@ class ConfigurationView(QWidget):
         root.addWidget(camera_box)
 
         footer = QHBoxLayout()
+        self.console_button = QPushButton("Ver consola técnica")
+        self.console_button.setObjectName("secondaryButton")
+        footer.addWidget(self.console_button)
         footer.addStretch()
         self.save_button = QPushButton("Guardar configuración")
         self.save_button.setObjectName("primaryButton")
@@ -119,6 +123,7 @@ class ConfigurationView(QWidget):
         self.worklist_test_button.clicked.connect(self.test_worklist_requested)
         self.pacs_test_button.clicked.connect(self.test_pacs_requested)
         self.devices_button.clicked.connect(self.devices_requested)
+        self.console_button.clicked.connect(self.console_requested)
         self.load_settings(settings)
 
     @staticmethod

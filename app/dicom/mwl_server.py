@@ -186,10 +186,10 @@ class MwlServer:
         self,
         repository: JsonWorklistRepository,
         *,
-        ae_title: str = "ELECTROCAP_WL",
+        ae_title: str = "COLPOCAP_WL",
         host: str = "127.0.0.1",
         port: int = 11112,
-        allowed_calling_aes: Iterable[str] = ("ELECTROCAP",),
+        allowed_calling_aes: Iterable[str] = ("COLPOCAP_MVP",),
     ) -> None:
         if not ae_title or len(ae_title) > 16:
             raise ValueError("El AE Title del servidor debe tener entre 1 y 16 caracteres.")
@@ -279,14 +279,14 @@ def _parser() -> argparse.ArgumentParser:
         description="Servidor DICOM MWL local para desarrollo de ElectroCap."
     )
     parser.add_argument("--data", type=Path, default=DEFAULT_DATA_PATH)
-    parser.add_argument("--ae-title", default="ELECTROCAP_WL")
+    parser.add_argument("--ae-title", default="COLPOCAP_WL")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=11112)
     parser.add_argument(
         "--allow-calling-ae",
         action="append",
         dest="allowed_calling_aes",
-        help="Calling AE permitido; puede repetirse. Por defecto: ELECTROCAP.",
+        help="Calling AE permitido; puede repetirse. Por defecto: COLPOCAP_MVP.",
     )
     parser.add_argument(
         "--log-level",
@@ -307,7 +307,7 @@ def main(argv: list[str] | None = None) -> int:
         ae_title=args.ae_title,
         host=args.host,
         port=args.port,
-        allowed_calling_aes=args.allowed_calling_aes or ("ELECTROCAP",),
+        allowed_calling_aes=args.allowed_calling_aes or ("COLPOCAP_MVP",),
     )
     try:
         server.start()

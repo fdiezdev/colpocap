@@ -5,16 +5,16 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QIcon, QPixmap, QResizeEvent, QTextCursor
+from PySide6.QtGui import QIcon, QPixmap, QResizeEvent
 from PySide6.QtWidgets import (
-    QFormLayout,
-    QGridLayout,
+    QAbstractItemView,
+    QFrame,
     QHBoxLayout,
     QLabel,
+    QListView,
     QListWidget,
     QListWidgetItem,
     QPushButton,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -27,9 +27,9 @@ class PreviewLabel(QLabel):
         super().__init__("La cámara se mostrará aquí al iniciar el estudio")
         self._source = QPixmap()
         self.setAlignment(Qt.AlignCenter)
-        self.setMinimumSize(640, 360)
+        self.setMinimumSize(680, 382)
         self.setStyleSheet(
-            "background: #16191d; color: #d6d8db; border-radius: 6px; "
+            "background: #10171A; color: #D6E0E3; border-radius: 10px; "
             "font-size: 16px;"
         )
 
@@ -60,7 +60,6 @@ class CaptureView(QWidget):
     start_requested = Signal()
     snapshot_requested = Signal()
     finish_requested = Signal()
-    local_export_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -81,78 +80,91 @@ class CaptureView(QWidget):
         header.addStretch()
         root.addLayout(header)
 
-        form = QFormLayout()
+        content = QHBoxLayout()
+        content.setSpacing(18)
+
+        controls_panel = QFrame()
+        controls_panel.setObjectName("studyControlsPanel")
+        controls_panel.setMinimumWidth(245)
+        controls_panel.setMaximumWidth(285)
+        controls = QVBoxLayout(controls_panel)
+        controls.setContentsMargins(18, 18, 18, 18)
+        controls.setSpacing(12)
+
+        patient_label = QLabel("Paciente")
+        patient_label.setObjectName("panelLabel")
+        controls.addWidget(patient_label)
         self.selected_patient = QLabel("Ningún estudio seleccionado")
         self.selected_patient.setWordWrap(True)
+        self.selected_patient.setObjectName("patientSummary")
+        controls.addWidget(self.selected_patient)
+
+        status_label = QLabel("Estado")
+        status_label.setObjectName("panelLabel")
+        controls.addWidget(status_label)
         self.workflow_status = QLabel("Sin selección")
-        self.workflow_status.setStyleSheet("font-weight: 600;")
-        form.addRow("Estudio:", self.selected_patient)
-        form.addRow("Estado:", self.workflow_status)
-        root.addLayout(form)
+        self.workflow_status.setObjectName("workflowStatus")
+        self.workflow_status.setWordWrap(True)
+        controls.addWidget(self.workflow_status)
 
-        content = QHBoxLayout()
-        camera_column = QVBoxLayout()
-        self.preview = PreviewLabel()
-        camera_column.addWidget(self.preview, 1)
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setObjectName("panelSeparator")
+        controls.addWidget(separator)
 
-        primary_controls = QGridLayout()
-        primary_controls.setSpacing(10)
         self.start_button = QPushButton("Iniciar estudio y cámara")
         self.snapshot_button = QPushButton("Capturar snapshot")
-        self.finish_button = QPushButton("Finalizar y enviar al PACS")
-        self.local_export_button = QPushButton("Finalizar y exportar DICOM")
         self.start_button.setObjectName("secondaryButton")
         self.snapshot_button.setObjectName("primaryButton")
+        self.start_button.setMinimumHeight(58)
+        self.snapshot_button.setMinimumHeight(58)
+        controls.addWidget(self.start_button)
+        controls.addWidget(self.snapshot_button)
+        controls.addStretch()
+
+        self.finish_button = QPushButton("Finalizar estudio")
         self.finish_button.setObjectName("primaryButton")
-        self.local_export_button.setObjectName("secondaryButton")
-        for button in (
-            self.start_button,
-            self.snapshot_button,
-            self.finish_button,
-            self.local_export_button,
-        ):
-            button.setMinimumHeight(48)
-        primary_controls.addWidget(self.start_button, 0, 0)
-        primary_controls.addWidget(self.snapshot_button, 0, 1)
-        primary_controls.addWidget(self.local_export_button, 1, 0)
-        primary_controls.addWidget(self.finish_button, 1, 1)
-        primary_controls.setColumnStretch(0, 1)
-        primary_controls.setColumnStretch(1, 1)
-        camera_column.addLayout(primary_controls)
+        self.finish_button.setMinimumHeight(62)
+        controls.addWidget(self.finish_button)
+        content.addWidget(controls_panel)
 
-        hint = QLabel(
-            "El snapshot guarda exactamente el cuadro visible. Puede tomar todas las "
-            "imágenes necesarias; se convierten a DICOM y se envían juntas al finalizar."
-        )
-        hint.setWordWrap(True)
-        camera_column.addWidget(hint)
-        content.addLayout(camera_column, 4)
+        study_area = QVBoxLayout()
+        study_area.setSpacing(14)
+        self.preview = PreviewLabel()
+        study_area.addWidget(self.preview, 1)
 
-        gallery_column = QVBoxLayout()
+        snapshots_panel = QFrame()
+        snapshots_panel.setObjectName("snapshotsPanel")
+        snapshots_layout = QVBoxLayout(snapshots_panel)
+        snapshots_layout.setContentsMargins(12, 10, 12, 8)
+        snapshots_layout.setSpacing(6)
         self.gallery_title = QLabel("Snapshots (0)")
-        self.gallery_title.setStyleSheet("font-size: 17px; font-weight: 600;")
-        gallery_column.addWidget(self.gallery_title)
+        self.gallery_title.setObjectName("snapshotsTitle")
+        snapshots_layout.addWidget(self.gallery_title)
         self.gallery = QListWidget()
-        self.gallery.setViewMode(QListWidget.IconMode)
-        self.gallery.setIconSize(QSize(180, 105))
-        self.gallery.setGridSize(QSize(200, 145))
-        self.gallery.setResizeMode(QListWidget.Adjust)
-        self.gallery.setMovement(QListWidget.Static)
-        gallery_column.addWidget(self.gallery, 1)
-        content.addLayout(gallery_column, 2)
+        self.gallery.setViewMode(QListView.IconMode)
+        self.gallery.setFlow(QListView.LeftToRight)
+        self.gallery.setWrapping(False)
+        self.gallery.setResizeMode(QListView.Fixed)
+        self.gallery.setMovement(QListView.Static)
+        self.gallery.setIconSize(QSize(160, 90))
+        self.gallery.setGridSize(QSize(180, 122))
+        self.gallery.setSpacing(6)
+        self.gallery.setUniformItemSizes(True)
+        self.gallery.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self.gallery.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.gallery.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.gallery.setMinimumHeight(150)
+        self.gallery.setMaximumHeight(175)
+        snapshots_layout.addWidget(self.gallery)
+        study_area.addWidget(snapshots_panel)
+        content.addLayout(study_area, 1)
         root.addLayout(content, 1)
-
-        self.log_view = QTextEdit()
-        self.log_view.setReadOnly(True)
-        self.log_view.setMaximumHeight(115)
-        self.log_view.document().setMaximumBlockCount(1000)
-        root.addWidget(self.log_view)
 
         self.back_button.clicked.connect(self.back_requested)
         self.start_button.clicked.connect(self.start_requested)
         self.snapshot_button.clicked.connect(self.snapshot_requested)
         self.finish_button.clicked.connect(self.finish_requested)
-        self.local_export_button.clicked.connect(self.local_export_requested)
         self.set_workflow_state()
 
     @property
@@ -161,8 +173,9 @@ class CaptureView(QWidget):
 
     def set_selected_study(self, study: StudyRecord) -> None:
         self.selected_patient.setText(
-            f"{study.patient_name or '(sin nombre)'} | PatientID: "
-            f"{study.patient_id or '(vacío)'} | Accession: "
+            f"{study.patient_name or '(sin nombre)'}\n"
+            f"Patient ID: {study.patient_id or '(vacío)'}\n"
+            f"Accession: "
             f"{study.accession_number or '(vacío)'}"
         )
         self.clear_session()
@@ -183,6 +196,7 @@ class CaptureView(QWidget):
         )
         item.setToolTip(image.snapshot_path)
         self.gallery.addItem(item)
+        self.gallery.scrollToItem(item, QAbstractItemView.PositionAtCenter)
         self.gallery_title.setText(f"Snapshots ({self.gallery.count()})")
 
     def clear_session(self) -> None:
@@ -210,7 +224,6 @@ class CaptureView(QWidget):
             recording and bool(self._latest_frame) and not busy
         )
         self.finish_button.setEnabled(snapshot_count > 0 and not busy)
-        self.local_export_button.setEnabled(snapshot_count > 0 and not busy)
         self.back_button.setEnabled(not recording and not busy)
         if busy:
             shown_status = status_text or "Finalizando y enviando…"
@@ -224,7 +237,3 @@ class CaptureView(QWidget):
         self._recording = False
         self._latest_frame = b""
         self.preview.clear_source(message)
-
-    def append_log(self, message: str) -> None:
-        self.log_view.append(message)
-        self.log_view.moveCursor(QTextCursor.End)

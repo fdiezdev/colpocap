@@ -59,7 +59,8 @@ QTextEdit {
     background-color: #FFFFFF;
     border: 1px solid #C8D8DE;
     border-radius: 6px;
-    padding: 7px 9px;
+    min-height: 24px;
+    padding: 6px 9px;
     selection-background-color: #1A7C91;
     selection-color: #FFFFFF;
 }
@@ -71,7 +72,7 @@ QComboBox:focus,
 QPlainTextEdit:focus,
 QTextEdit:focus {
     border: 2px solid #1A7C91;
-    padding: 6px 8px;
+    padding: 5px 8px;
 }
 
 QPushButton {
@@ -148,6 +149,45 @@ QPushButton#navigationButton {
 
 QPushButton#navigationButton:hover {
     background-color: #E5F0F3;
+}
+
+QFrame#studyControlsPanel,
+QFrame#snapshotsPanel {
+    background-color: #FFFFFF;
+    border: 1px solid #D8E4E8;
+    border-radius: 10px;
+}
+
+QLabel#panelLabel {
+    color: #66808A;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+QLabel#patientSummary {
+    color: #173D49;
+    font-size: 14px;
+    font-weight: 650;
+}
+
+QLabel#workflowStatus {
+    color: #17645F;
+    background-color: #E8F5F4;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-weight: 650;
+}
+
+QFrame#panelSeparator {
+    color: #D8E4E8;
+    background-color: #D8E4E8;
+    max-height: 1px;
+}
+
+QLabel#snapshotsTitle {
+    color: #234D5C;
+    font-size: 16px;
+    font-weight: 700;
 }
 
 QTableWidget,
