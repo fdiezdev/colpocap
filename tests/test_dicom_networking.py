@@ -75,7 +75,7 @@ def test_c_echo_c_store_and_mwl_c_find_roundtrip(tmp_path: Path) -> None:
         Image.new("RGB", (10, 10), color="green").save(source)
         dicom_path = tmp_path / "network.dcm"
         DicomBuilder(
-            InstitutionConfig("Test", "COLPO", "Custom", "ElectroCap", "1.0.0")
+            InstitutionConfig("Test", "COLPO", "Custom", "ECAP", "1.0.0")
         ).create_vl_endoscopic_image(
             snapshot_path=source,
             output_path=dicom_path,

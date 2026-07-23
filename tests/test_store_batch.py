@@ -23,7 +23,7 @@ def test_store_many_uses_one_association_for_all_instances(
     source = tmp_path / "source.png"
     Image.new("RGB", (8, 8), color="orange").save(source)
     builder = DicomBuilder(
-        InstitutionConfig("Test", "COLPO", "Custom", "ElectroCap", "1.0")
+        InstitutionConfig("Test", "COLPO", "Custom", "ECAP", "1.0")
     )
     paths = []
     for instance_number in (1, 2):

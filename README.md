@@ -1,4 +1,4 @@
-# ElectroCap
+# ECAP
 
 Estación desktop de captura colposcópica para Windows 10/11. Consulta una DICOM Modality Worklist, permite cargar pacientes manualmente durante una caída de conectividad, asocia el procedimiento elegido con una grabación MP4 local, muestra la cámara en vivo y captura múltiples imágenes. Al finalizar, puede enviar la serie DICOM al PACS o exportarla a una carpeta o unidad extraíble.
 
@@ -66,7 +66,7 @@ su checksum SHA-256 y comprueba que incluya DirectShow. El ejecutable queda en:
 .\third_party\ffmpeg\windows-x64\ffmpeg.exe
 ```
 
-No es necesario agregarlo al `PATH`. ElectroCap elige primero una ruta explícita,
+No es necesario agregarlo al `PATH`. ECAP elige primero una ruta explícita,
 luego `ELECTROCAP_FFMPEG`, después el binario incluido y, solamente si este no
 existe, intenta usar el `PATH` del sistema. Tanto la grabación como la creación
 de snapshots comparten este mismo mecanismo.
@@ -114,7 +114,7 @@ La aplicación carga `config/settings.json` por defecto. El repositorio entrega 
     "name": "Instituto de Diagnóstico por Imágenes",
     "station_name": "COLPO_CAPTURE_01",
     "manufacturer": "Custom",
-    "manufacturer_model_name": "ElectroCap",
+    "manufacturer_model_name": "ECAP",
     "software_version": "1.0.0"
   },
   "storage": {
@@ -127,7 +127,7 @@ Las rutas relativas de almacenamiento se resuelven respecto de la raíz del
 proyecto. Los AE Titles se validan a un máximo de 16 caracteres. Los
 identificadores técnicos `COLPOCAP_MVP` y `COLPOCAP_WL` se conservan para no
 romper asociaciones DICOM ya configuradas; no forman parte de la marca visible
-ElectroCap y solamente deben cambiarse en coordinación con Worklist y PACS.
+ECAP y solamente deben cambiarse en coordinación con Worklist y PACS.
 
 `StationName` tiene VR DICOM SH y admite un máximo de 16 caracteres.
 
@@ -147,7 +147,7 @@ assets/electrocap_logo.png
 
 Se recomienda un PNG horizontal con fondo transparente y al menos 960 × 290
 píxeles. Al reemplazar o agregar el archivo, reinicie la aplicación. Si no está
-disponible, la interfaz muestra el nombre ElectroCap como respaldo.
+disponible, la interfaz muestra el nombre ECAP como respaldo.
 
 El ícono de ventana y barra de tareas se carga desde
 `assets/electrocap_icon.png`. Para un ejecutable de Windows se recomienda además
@@ -166,8 +166,8 @@ python -m app.main
 3. Ajuste los filtros y pulse “Buscar en Worklist”. La fecha actual se aplica por defecto. Si la Worklist no está disponible, use “Cargar paciente manualmente”, verifique la identidad y agregue la entrada a la misma tabla.
 4. Verifique una fila y pulse “Iniciar estudio seleccionado”.
 5. En la pantalla de captura, pulse “Iniciar estudio y cámara”.
-6. Cuando aparezca el video en vivo, pulse “Capturar snapshot” tantas veces como sea necesario. La galería confirma cada imagen.
-7. Pulse “Finalizar estudio” y elija en la ventana si desea enviar al PACS o exportar DICOM a una carpeta o unidad extraíble. ElectroCap crea una subcarpeta por estudio y copia todas las instancias como `IM_0001.dcm`, `IM_0002.dcm` y sucesivas.
+6. Cuando aparezca el video en vivo, pulse “Capturar snapshot” o la barra espaciadora tantas veces como sea necesario. La galería confirma cada imagen.
+7. Pulse “Finalizar estudio” y elija en la ventana si desea enviar al PACS o exportar DICOM a una carpeta o unidad extraíble. ECAP crea una subcarpeta por estudio y copia todas las instancias como `IM_0001.dcm`, `IM_0002.dcm` y sucesivas.
 8. Un envío fallido o parcial aparece en el menú principal. Desde allí puede reintentarse o exportarse a una carpeta sin reenviar las instancias ya aceptadas.
 
 La UI impide iniciar sin estudio, capturar antes de recibir un frame y finalizar sin snapshots. Si la Worklist no entrega StudyInstanceUID, se genera uno y queda registrado localmente antes de capturar. Cada estudio usa un SeriesInstanceUID común y un SOPInstanceUID nuevo por snapshot.
@@ -267,7 +267,7 @@ Para un entorno **exclusivamente local de desarrollo**, puede usar este fragment
 
 ```json
 {
-  "Name": "ElectroCap Test PACS",
+  "Name": "ECAP Test PACS",
   "DicomServerEnabled": true,
   "DicomAet": "ORTHANC",
   "DicomPort": 4242,
@@ -279,7 +279,7 @@ Para un entorno **exclusivamente local de desarrollo**, puede usar este fragment
 
 No exponga esta configuración sin autenticación fuera de `localhost`. Para una red clínica aplique las recomendaciones oficiales de [seguridad de Orthanc](https://orthanc.uclouvain.be/book/faq/security.html).
 
-Configure ElectroCap así:
+Configure ECAP así:
 
 ```json
 "pacs": {

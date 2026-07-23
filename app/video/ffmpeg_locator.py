@@ -1,4 +1,4 @@
-"""Locate and validate the FFmpeg executable used by ElectroCap."""
+"""Locate and validate the FFmpeg executable used by ECAP."""
 
 from __future__ import annotations
 

@@ -35,7 +35,7 @@ def institution() -> InstitutionConfig:
         name="Instituto de Prueba",
         station_name="COLPOSCOPY_CAPTURE_01",
         manufacturer="Custom",
-        manufacturer_model_name="ElectroCap",
+        manufacturer_model_name="ECAP",
         software_version="0.1.0",
     )
 

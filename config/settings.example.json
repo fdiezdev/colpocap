@@ -20,7 +20,7 @@
     "name": "Instituto de Diagnóstico por Imágenes",
     "station_name": "COLPO_CAPTURE_01",
     "manufacturer": "Custom",
-    "manufacturer_model_name": "ElectroCap",
+    "manufacturer_model_name": "ECAP",
     "software_version": "1.0.0"
   },
   "storage": {

@@ -9,6 +9,14 @@ import re
 from typing import Any, Mapping
 
 
+DEVELOPMENT_WORKLIST_AE_TITLE = "COLPOCAP_WL"
+DEVELOPMENT_WORKLIST_PORT = 11112
+LEGACY_DEVELOPMENT_WORKLIST_PORT = 11111
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+APPLICATION_NAME = "ECAP"
+LEGACY_APPLICATION_NAME = "ElectroCap"
+
+
 class ConfigurationError(RuntimeError):
     """Raised when the settings file is missing or invalid."""
 
@@ -171,6 +179,33 @@ def _endpoint(data: Mapping[str, Any], section: str) -> DicomEndpointConfig:
     )
 
 
+def _normalize_development_worklist(
+    endpoint: DicomEndpointConfig,
+) -> DicomEndpointConfig:
+    """Migrate the legacy endpoint used by the bundled local MWL server.
+
+    Older installations could retain port 11111 in settings.json even though
+    the development server has always been launched on 11112. Keep custom and
+    remote Worklist endpoints untouched.
+    """
+    is_bundled_local_server = (
+        endpoint.ae_title.upper() == DEVELOPMENT_WORKLIST_AE_TITLE
+        and endpoint.host.strip().lower() in LOOPBACK_HOSTS
+        and endpoint.port == LEGACY_DEVELOPMENT_WORKLIST_PORT
+    )
+    if not is_bundled_local_server:
+        return endpoint
+    return DicomEndpointConfig(
+        ae_title=endpoint.ae_title,
+        host=endpoint.host,
+        port=DEVELOPMENT_WORKLIST_PORT,
+    )
+
+
+def _normalize_legacy_brand(value: str) -> str:
+    return APPLICATION_NAME if value.casefold() == LEGACY_APPLICATION_NAME.casefold() else value
+
+
 def load_settings(path: str | Path | None = None) -> Settings:
     """Load settings from JSON and fail with a user-facing, actionable message."""
     default_path = Path(__file__).resolve().parent.parent / "config" / "settings.json"
@@ -222,7 +257,7 @@ def load_settings(path: str | Path | None = None) -> Settings:
 
     return Settings(
         local_ae_title=local_ae_title,
-        worklist=_endpoint(data, "worklist"),
+        worklist=_normalize_development_worklist(_endpoint(data, "worklist")),
         pacs=_endpoint(data, "pacs"),
         video=VideoConfig(
             device_name=device_name.strip(),
@@ -233,9 +268,13 @@ def load_settings(path: str | Path | None = None) -> Settings:
         institution=InstitutionConfig(
             name=_required_text(institution_raw, "name", "institution"),
             station_name=_required_text(institution_raw, "station_name", "institution"),
-            manufacturer=_required_text(institution_raw, "manufacturer", "institution"),
-            manufacturer_model_name=_required_text(
-                institution_raw, "manufacturer_model_name", "institution"
+            manufacturer=_normalize_legacy_brand(
+                _required_text(institution_raw, "manufacturer", "institution")
+            ),
+            manufacturer_model_name=_normalize_legacy_brand(
+                _required_text(
+                    institution_raw, "manufacturer_model_name", "institution"
+                )
             ),
             software_version=_required_text(
                 institution_raw, "software_version", "institution"

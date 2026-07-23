@@ -1,6 +1,6 @@
 """Development-only DICOM Modality Worklist SCP backed by a JSON file.
 
-This server is intentionally small and deterministic.  It lets ElectroCap exercise
+This server is intentionally small and deterministic. It lets ECAP exercise
 the same C-FIND workflow used against an institutional MWL without making
 Orthanc responsible for appointments.
 """
@@ -152,7 +152,7 @@ def _matches_text(candidate: str, expression: str, *, is_date: bool = False) -> 
 
 
 def dataset_matches_query(candidate: Dataset, query: Dataset) -> bool:
-    """Apply the common MWL matching keys used by ElectroCap and findscu."""
+    """Apply the common MWL matching keys used by ECAP and findscu."""
 
     for dicom_keyword in TOP_LEVEL_FIELDS:
         expression = _text(getattr(query, dicom_keyword, ""))
@@ -276,7 +276,7 @@ class MwlServer:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Servidor DICOM MWL local para desarrollo de ElectroCap."
+        description="Servidor DICOM MWL local para desarrollo de ECAP."
     )
     parser.add_argument("--data", type=Path, default=DEFAULT_DATA_PATH)
     parser.add_argument("--ae-title", default="COLPOCAP_WL")

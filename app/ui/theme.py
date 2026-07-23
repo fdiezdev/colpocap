@@ -1,4 +1,4 @@
-"""Shared visual language for the ElectroCap desktop interface."""
+"""Shared visual language for the ECAP desktop interface."""
 
 from __future__ import annotations
 
@@ -14,13 +14,13 @@ QWidget#page {
 }
 
 QLabel#pageTitle {
-    color: #123B4A;
+    color: #274C78;
     font-size: 25px;
     font-weight: 700;
 }
 
 QLabel#brandFallback {
-    color: #0F5E73;
+    color: #376396;
     font-size: 44px;
     font-weight: 800;
     letter-spacing: 1px;
@@ -29,6 +29,37 @@ QLabel#brandFallback {
 QLabel#supportingText {
     color: #5B727C;
     font-size: 14px;
+}
+
+QScrollArea#configurationScroll,
+QWidget#configurationContent {
+    background-color: #F3F7F9;
+    border: 0;
+}
+
+QScrollBar:vertical {
+    background-color: #E7EFF2;
+    width: 11px;
+    margin: 2px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #9DB7C0;
+    min-height: 34px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: #789AA6;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical,
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    height: 0;
+    background: transparent;
 }
 
 QGroupBox {
@@ -61,7 +92,7 @@ QTextEdit {
     border-radius: 6px;
     min-height: 24px;
     padding: 6px 9px;
-    selection-background-color: #1A7C91;
+    selection-background-color: #376396;
     selection-color: #FFFFFF;
 }
 
@@ -71,7 +102,7 @@ QDateEdit:focus,
 QComboBox:focus,
 QPlainTextEdit:focus,
 QTextEdit:focus {
-    border: 2px solid #1A7C91;
+    border: 2px solid #376396;
     padding: 5px 8px;
 }
 
@@ -81,17 +112,17 @@ QPushButton {
     border: 1px solid #BDD0D7;
     border-radius: 7px;
     background-color: #FFFFFF;
-    color: #234D5C;
+    color: #376396;
     font-weight: 600;
 }
 
 QPushButton:hover {
-    background-color: #EEF6F8;
-    border-color: #8FB5C0;
+    background-color: #EDF2F8;
+    border-color: #8FA9C6;
 }
 
 QPushButton:pressed {
-    background-color: #DFEDF1;
+    background-color: #DDE7F2;
 }
 
 QPushButton:disabled {
@@ -102,33 +133,34 @@ QPushButton:disabled {
 
 QPushButton#primaryButton,
 QPushButton#heroPrimaryButton {
-    background-color: #126E82;
-    border-color: #126E82;
+    background-color: #376396;
+    border-color: #376396;
     color: #FFFFFF;
 }
 
 QPushButton#primaryButton:hover,
 QPushButton#heroPrimaryButton:hover {
-    background-color: #0D5D70;
-    border-color: #0D5D70;
+    background-color: #2F5683;
+    border-color: #2F5683;
 }
 
 QPushButton#primaryButton:pressed,
 QPushButton#heroPrimaryButton:pressed {
-    background-color: #094B5B;
+    background-color: #27486E;
+    border-color: #27486E;
 }
 
 QPushButton#secondaryButton,
 QPushButton#heroSecondaryButton {
-    background-color: #E8F5F4;
-    border-color: #9CCECB;
-    color: #17645F;
+    background-color: #EAF0F7;
+    border-color: #376396;
+    color: #376396;
 }
 
 QPushButton#secondaryButton:hover,
 QPushButton#heroSecondaryButton:hover {
-    background-color: #D9EFED;
-    border-color: #70B5B0;
+    background-color: #DCE6F1;
+    border-color: #7E9DBF;
 }
 
 QPushButton#heroPrimaryButton,
@@ -140,15 +172,29 @@ QPushButton#heroSecondaryButton {
 }
 
 QPushButton#navigationButton {
-    background-color: transparent;
-    border-color: transparent;
-    color: #35616F;
-    padding-left: 4px;
-    padding-right: 10px;
+    background-color: #376396;
+    border-color: #376396;
+    color: #FFFFFF;
+    min-height: 36px;
+    padding: 5px 15px;
+    font-size: 14px;
+    font-weight: 700;
 }
 
 QPushButton#navigationButton:hover {
-    background-color: #E5F0F3;
+    background-color: #2F5683;
+    border-color: #2F5683;
+}
+
+QPushButton#navigationButton:pressed {
+    background-color: #27486E;
+    border-color: #27486E;
+}
+
+QLabel#shortcutHint {
+    color: #64788E;
+    font-size: 12px;
+    font-weight: 600;
 }
 
 QFrame#studyControlsPanel,
@@ -171,8 +217,8 @@ QLabel#patientSummary {
 }
 
 QLabel#workflowStatus {
-    color: #17645F;
-    background-color: #E8F5F4;
+    color: #2F5683;
+    background-color: #EAF0F7;
     border-radius: 6px;
     padding: 8px 10px;
     font-weight: 650;
@@ -206,7 +252,7 @@ QTableWidget::item {
 
 QTableWidget::item:selected,
 QListWidget::item:selected {
-    background-color: #D8EEF1;
+    background-color: #DDE7F2;
     color: #18313B;
 }
 

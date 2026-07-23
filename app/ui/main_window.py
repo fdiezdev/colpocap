@@ -1,4 +1,4 @@
-"""Main desktop window and guided UI/service coordination."""
+"""Main ECAP window and guided UI/service coordination."""
 
 from __future__ import annotations
 
@@ -93,7 +93,7 @@ class MainWindow(QMainWindow):
         self._console_text: QPlainTextEdit | None = None
 
         self._configure_services(settings)
-        self.setWindowTitle("ElectroCap - Captura colposcópica DICOM")
+        self.setWindowTitle("ECAP - Captura colposcópica DICOM")
         self.resize(1320, 900)
         self.setMinimumSize(1080, 720)
         self.setStyleSheet(APP_STYLESHEET)
@@ -152,10 +152,9 @@ class MainWindow(QMainWindow):
         self.logo_label = QLabel()
         self.logo_label.setAlignment(Qt.AlignCenter)
         self.logo_label.setMinimumHeight(118)
-        self.logo_label.setToolTip(f"Logo de la aplicación: {LOGO_PATH}")
         logo = QPixmap(str(LOGO_PATH))
         if logo.isNull():
-            self.logo_label.setText("ElectroCap")
+            self.logo_label.setText("ECAP")
             self.logo_label.setObjectName("brandFallback")
         else:
             self.logo_label.setPixmap(
@@ -219,7 +218,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(30, 26, 30, 26)
         layout.setSpacing(14)
         header = QHBoxLayout()
-        self.worklist_back_button = QPushButton("Menú principal")
+        self.worklist_back_button = QPushButton("‹  Menú principal")
         self.worklist_back_button.setObjectName("navigationButton")
         title = QLabel("Worklist y selección del estudio")
         title.setObjectName("pageTitle")
@@ -415,6 +414,7 @@ class MainWindow(QMainWindow):
         self.capture_view.set_selected_study(selection.study)
         self._sync_capture_state("Listo para iniciar la cámara")
         self.stack.setCurrentWidget(self.capture_view)
+        self.capture_view.setFocus(Qt.FocusReason.OtherFocusReason)
         if selection.warnings:
             QMessageBox.warning(
                 self, "Metadata incompleta", "\n".join(selection.warnings)

@@ -1,5 +1,5 @@
 [project]
-name = "electrocap"
+name = "ecap"
 version = "1.0.0"
 description = "Desktop capture station for colposcopy, DICOM MWL and PACS"
 requires-python = ">=3.11"

@@ -1,6 +1,6 @@
-# FFmpeg para ElectroCap (Windows x64)
+# FFmpeg para ECAP (Windows x64)
 
-Esta carpeta es la ubicación estable del ejecutable que utiliza ElectroCap:
+Esta carpeta es la ubicación estable del ejecutable que utiliza ECAP:
 
 ```text
 third_party/ffmpeg/windows-x64/ffmpeg.exe
@@ -28,7 +28,7 @@ Orden de selección en la aplicación:
 4. `ffmpeg` disponible en el `PATH` del sistema.
 
 La compilación distribuida por Gyan está licenciada bajo GPLv3 porque incorpora
-componentes GPL, entre ellos `libx264`. Si se redistribuye ElectroCap junto con el
+componentes GPL, entre ellos `libx264`. Si se redistribuye ECAP junto con el
 binario, deben conservarse los avisos de licencia y la información de código
 fuente correspondientes. Consulte `SOURCE.txt` y el archivo `LICENSE` que crea
 el instalador.

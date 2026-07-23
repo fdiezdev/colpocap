@@ -11,7 +11,12 @@ from pydicom.sequence import Sequence
 from pynetdicom import AE
 from pynetdicom.sop_class import ModalityWorklistInformationFind, Verification
 
-from app.config import DicomEndpointConfig
+from app.config import (
+    DEVELOPMENT_WORKLIST_AE_TITLE,
+    DEVELOPMENT_WORKLIST_PORT,
+    DicomEndpointConfig,
+    LOOPBACK_HOSTS,
+)
 from .store_client import EchoResult
 
 LOGGER = logging.getLogger(__name__)
@@ -64,6 +69,26 @@ class WorklistClient:
         ae.dimse_timeout = 30
         ae.network_timeout = 10
 
+    def _association_error(self) -> str:
+        message = (
+            f"No se pudo conectar con Worklist {self.endpoint.ae_title} "
+            f"en {self.endpoint.host}:{self.endpoint.port}. "
+            "Verifique que el servicio esté iniciado y que el host y el puerto coincidan."
+        )
+        is_local_development_server = (
+            self.endpoint.ae_title.upper() == DEVELOPMENT_WORKLIST_AE_TITLE
+            and self.endpoint.host.strip().lower() in LOOPBACK_HOSTS
+        )
+        if (
+            is_local_development_server
+            and self.endpoint.port != DEVELOPMENT_WORKLIST_PORT
+        ):
+            message += (
+                " El servidor MWL local incluido con ECAP usa el puerto "
+                f"{DEVELOPMENT_WORKLIST_PORT} por defecto."
+            )
+        return message
+
     def echo(self) -> EchoResult:
         ae = AE(ae_title=self.local_ae_title)
         ae.add_requested_context(Verification)
@@ -74,10 +99,7 @@ class WorklistClient:
             ae_title=self.endpoint.ae_title,
         )
         if not association.is_established:
-            message = (
-                f"No se pudo asociar con Worklist {self.endpoint.ae_title} "
-                f"({self.endpoint.host}:{self.endpoint.port})."
-            )
+            message = self._association_error()
             LOGGER.error(message)
             return EchoResult(False, None, message)
         try:
@@ -109,10 +131,7 @@ class WorklistClient:
             ae_title=self.endpoint.ae_title,
         )
         if not association.is_established:
-            raise WorklistError(
-                f"No se pudo asociar con Worklist {self.endpoint.ae_title} "
-                f"en {self.endpoint.host}:{self.endpoint.port}."
-            )
+            raise WorklistError(self._association_error())
 
         results: list[WorklistItem] = []
         try:

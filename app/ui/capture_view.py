@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QIcon, QPixmap, QResizeEvent
+from PySide6.QtGui import QIcon, QKeySequence, QPixmap, QResizeEvent, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFrame,
@@ -66,12 +66,13 @@ class CaptureView(QWidget):
         self._latest_frame = b""
         self._recording = False
         self.setObjectName("page")
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         root = QVBoxLayout(self)
         root.setContentsMargins(30, 26, 30, 26)
         root.setSpacing(16)
 
         header = QHBoxLayout()
-        self.back_button = QPushButton("Volver a Worklist")
+        self.back_button = QPushButton("‹  Volver a Worklist")
         self.back_button.setObjectName("navigationButton")
         title = QLabel("Captura del estudio")
         title.setObjectName("pageTitle")
@@ -120,6 +121,10 @@ class CaptureView(QWidget):
         self.snapshot_button.setMinimumHeight(58)
         controls.addWidget(self.start_button)
         controls.addWidget(self.snapshot_button)
+        shortcut_hint = QLabel("Atajo: barra espaciadora")
+        shortcut_hint.setObjectName("shortcutHint")
+        shortcut_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        controls.addWidget(shortcut_hint)
         controls.addStretch()
 
         self.finish_button = QPushButton("Finalizar estudio")
@@ -165,7 +170,21 @@ class CaptureView(QWidget):
         self.start_button.clicked.connect(self.start_requested)
         self.snapshot_button.clicked.connect(self.snapshot_requested)
         self.finish_button.clicked.connect(self.finish_requested)
+        self.snapshot_shortcut = QShortcut(
+            QKeySequence(Qt.Key.Key_Space), self
+        )
+        self.snapshot_shortcut.setContext(
+            Qt.ShortcutContext.WidgetWithChildrenShortcut
+        )
+        self.snapshot_shortcut.setAutoRepeat(False)
+        self.snapshot_shortcut.activated.connect(
+            self._request_snapshot_from_shortcut
+        )
         self.set_workflow_state()
+
+    def _request_snapshot_from_shortcut(self) -> None:
+        if self._recording and self.snapshot_button.isEnabled():
+            self.snapshot_requested.emit()
 
     @property
     def latest_frame_jpeg(self) -> bytes:

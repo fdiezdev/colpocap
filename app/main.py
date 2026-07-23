@@ -1,4 +1,4 @@
-"""ElectroCap desktop entry point."""
+"""ECAP desktop entry point."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ FALLBACK_ICON_PATH = ASSETS_DIRECTORY / "electrocap_logo.png"
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="ElectroCap")
+    parser = argparse.ArgumentParser(description="ECAP")
     parser.add_argument(
         "--config",
         type=Path,
@@ -33,8 +33,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     arguments = build_parser().parse_args(argv)
     qt_app = QApplication(sys.argv[:1])
-    qt_app.setApplicationName("ElectroCap")
-    qt_app.setApplicationDisplayName("ElectroCap")
+    qt_app.setApplicationName("ECAP")
+    qt_app.setApplicationDisplayName("ECAP")
     icon_path = APP_ICON_PATH if APP_ICON_PATH.is_file() else FALLBACK_ICON_PATH
     if icon_path.is_file():
         qt_app.setWindowIcon(QIcon(str(icon_path)))
@@ -47,7 +47,7 @@ def main(argv: list[str] | None = None) -> int:
 
     configure_logging(settings.log_path)
     logger = logging.getLogger(__name__)
-    logger.info("Inicio de ElectroCap")
+    logger.info("Inicio de ECAP")
     logger.info("Configuración cargada desde %s", settings.config_path)
 
     def log_unhandled(
@@ -65,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
         database = Database(settings.storage.database_path)
         database.initialize()
         window = MainWindow(settings, database)
-        window.show()
+        window.showMaximized()
         return qt_app.exec()
     except Exception as exc:
         logger.exception("No se pudo iniciar la aplicación")

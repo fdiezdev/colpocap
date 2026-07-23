@@ -29,7 +29,7 @@ def test_folder_export_copies_a_complete_dicom_study(tmp_path: Path) -> None:
     source = tmp_path / "source.jpg"
     Image.new("RGB", (12, 12), color="teal").save(source)
     builder = DicomBuilder(
-        InstitutionConfig("Test", "ELECTROCAP", "Custom", "ElectroCap", "1.0")
+        InstitutionConfig("Test", "ECAP", "Custom", "ECAP", "1.0")
     )
     series_uid = "1.2.826.0.1.3680043.8.498.501"
     for instance_number in (1, 2):
@@ -64,7 +64,7 @@ def test_folder_export_copies_a_complete_dicom_study(tmp_path: Path) -> None:
     ).export_capture_images(capture.id, destination)
 
     assert outcome.directory.parent == destination
-    assert outcome.directory.name.startswith("ElectroCap_PID_10_ACC_20_")
+    assert outcome.directory.name.startswith("ECAP_PID_10_ACC_20_")
     assert [path.name for path in outcome.files] == ["IM_0001.dcm", "IM_0002.dcm"]
     assert all(path.is_file() for path in outcome.files)
     assert {

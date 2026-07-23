@@ -112,7 +112,7 @@ class FFmpegManager:
             self._preview_thread = threading.Thread(
                 target=self._read_preview_frames,
                 args=(self._process,),
-                name="electrocap-preview",
+                name="ecap-preview",
                 daemon=True,
             )
             self._preview_thread.start()

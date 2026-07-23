@@ -20,7 +20,7 @@ $ArchivePath = Join-Path $TemporaryDirectory $ArchiveName
 $ExtractedDirectory = Join-Path $TemporaryDirectory "extracted"
 
 if (-not [Environment]::Is64BitOperatingSystem) {
-    throw "ElectroCap requiere Windows de 64 bits para usar esta compilación de FFmpeg."
+    throw "ECAP requiere Windows de 64 bits para usar esta compilación de FFmpeg."
 }
 
 if ((Test-Path -LiteralPath $TargetExecutable) -and -not $Force) {

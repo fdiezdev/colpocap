@@ -13,7 +13,7 @@ def configure_logging(log_path: Path, level: int = logging.INFO) -> None:
     root.setLevel(level)
 
     for handler in list(root.handlers):
-        if getattr(handler, "_electrocap_handler", False):
+        if getattr(handler, "_ecap_handler", False):
             root.removeHandler(handler)
             handler.close()
 
@@ -22,13 +22,13 @@ def configure_logging(log_path: Path, level: int = logging.INFO) -> None:
     )
     console = logging.StreamHandler()
     console.setFormatter(formatter)
-    console._electrocap_handler = True  # type: ignore[attr-defined]
+    console._ecap_handler = True  # type: ignore[attr-defined]
 
     file_handler = RotatingFileHandler(
         log_path, maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
     )
     file_handler.setFormatter(formatter)
-    file_handler._electrocap_handler = True  # type: ignore[attr-defined]
+    file_handler._ecap_handler = True  # type: ignore[attr-defined]
 
     root.addHandler(console)
     root.addHandler(file_handler)

@@ -108,10 +108,10 @@ class ExportService:
         timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
         patient = self._safe_path_part(study.patient_id, "SIN_ID")
         accession = self._safe_path_part(study.accession_number, "SIN_ACCESSION")
-        base_name = f"ElectroCap_{patient}_{accession}_{timestamp}"
+        base_name = f"ECAP_{patient}_{accession}_{timestamp}"
         final_directory = self._available_directory(destination_root, base_name)
         staging_directory = destination_root / (
-            f".electrocap-export-{uuid4().hex}.tmp"
+            f".ecap-export-{uuid4().hex}.tmp"
         )
 
         exported_files: list[Path] = []
