@@ -178,17 +178,20 @@ class CaptureView(QWidget):
         self,
         *,
         selected: bool = False,
+        can_start: bool = True,
         recording: bool = False,
         snapshot_count: int = 0,
         busy: bool = False,
         status_text: str | None = None,
     ) -> None:
         self._recording = recording
-        self.start_button.setEnabled(selected and not recording and not busy)
+        self.start_button.setEnabled(
+            selected and can_start and not recording and not busy
+        )
         self.snapshot_button.setEnabled(
             recording and bool(self._latest_frame) and not busy
         )
-        self.finish_button.setEnabled(recording and snapshot_count > 0 and not busy)
+        self.finish_button.setEnabled(snapshot_count > 0 and not busy)
         self.back_button.setEnabled(not recording and not busy)
         if busy:
             shown_status = status_text or "Finalizando y enviando…"
@@ -206,4 +209,3 @@ class CaptureView(QWidget):
     def append_log(self, message: str) -> None:
         self.log_view.append(message)
         self.log_view.moveCursor(QTextCursor.End)
-

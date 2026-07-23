@@ -89,3 +89,44 @@ def test_foreign_keys_reject_unknown_study(tmp_path: Path) -> None:
         assert "FOREIGN KEY" in str(exc).upper()
     else:
         raise AssertionError("SQLite debía rechazar un study_id inexistente")
+
+
+def test_database_tracks_multiple_images_in_one_capture(tmp_path: Path) -> None:
+    database = Database(tmp_path / "multi.sqlite3")
+    database.initialize()
+    study = database.create_study(study_values())
+    capture = database.create_capture(study.id, tmp_path / "video.mp4")
+
+    first = database.create_capture_image(
+        capture_id=capture.id,
+        snapshot_path=tmp_path / "snapshot-1.jpg",
+        instance_number=1,
+    )
+    second = database.create_capture_image(
+        capture_id=capture.id,
+        snapshot_path=tmp_path / "snapshot-2.jpg",
+        instance_number=2,
+    )
+    database.update_capture_image(
+        first.id,
+        dicom_image_path=str(tmp_path / "snapshot-1.dcm"),
+        status=WorkflowStatus.DICOM_CREATED,
+    )
+    database.update_capture_image(
+        second.id,
+        dicom_image_path=str(tmp_path / "snapshot-2.dcm"),
+        status=WorkflowStatus.DICOM_CREATED,
+    )
+
+    images = database.list_capture_images(capture.id)
+    assert [image.instance_number for image in images] == [1, 2]
+    pending = database.list_pending_captures()
+    assert pending[0]["image_count"] == 2
+    assert pending[0]["sent_count"] == 0
+
+    database.update_capture_image(first.id, status=WorkflowStatus.SENT)
+    pending = database.list_pending_captures()
+    assert pending[0]["sent_count"] == 1
+    database.update_capture_image(second.id, status=WorkflowStatus.SENT)
+    assert database.list_pending_captures() == []
+    assert database.table_count("capture_images") == 2

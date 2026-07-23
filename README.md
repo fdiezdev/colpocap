@@ -1,6 +1,6 @@
 # ColpoCap MVP
 
-Estación desktop de captura colposcópica para Windows 10/11. Consulta una DICOM Modality Worklist, asocia el procedimiento elegido con una grabación MP4 local, extrae una imagen fija, crea un objeto **VL Endoscopic Image Storage** RGB sin compresión y lo envía por C-STORE al PACS.
+Estación desktop de captura colposcópica para Windows 10/11. Consulta una DICOM Modality Worklist, asocia el procedimiento elegido con una grabación MP4 local, muestra la cámara en vivo, permite capturar múltiples imágenes y las envía al PACS como una única serie DICOM al finalizar el estudio.
 
 El objetivo de esta versión es validar interoperabilidad, trazabilidad y operación segura del flujo básico. La interfaz es deliberadamente simple.
 
@@ -9,8 +9,9 @@ El objetivo de esta versión es validar interoperabilidad, trazabilidad y operac
 Flujo obligatorio implementado:
 
 ```text
-MWL C-FIND → selección → MP4/H.264 local → snapshot JPEG
-           → DICOM VL Endoscopic Image → C-ECHO → C-STORE PACS
+menú → MWL C-FIND → selección → cámara + MP4/H.264 local
+     → snapshots JPEG en vivo → finalizar
+     → serie DICOM VL Endoscopic Image → C-ECHO → lote C-STORE PACS
 ```
 
 Incluye:
@@ -18,15 +19,16 @@ Incluye:
 - consulta MWL por fecha, PatientName, PatientID y AccessionNumber;
 - tabla y selección explícita del estudio;
 - captura FFmpeg/DirectShow en Windows y diagnóstico de dispositivos;
-- extracción de snapshot desde el MP4;
-- DICOM RGB Explicit VR Little Endian sin compresión, con UIDs nuevos de serie e instancia;
+- preview en vivo obtenido del mismo proceso FFmpeg que graba el MP4;
+- captura de múltiples snapshots del cuadro exacto mostrado al operador;
+- DICOM RGB Explicit VR Little Endian sin compresión, con una serie común e instancias numeradas;
 - validación del DICOM por relectura antes del envío;
-- C-ECHO y C-STORE con registro del status DICOM;
+- C-ECHO y envío de todas las instancias mediante una sola asociación C-STORE, con registro individual de cada status DICOM;
 - SQLite local con estudios, capturas y todos los intentos de exportación;
 - reintento manual de pendientes o fallidos;
 - log rotativo en `logs/app.log` y log visible en la UI.
 
-No incluye autenticación, informes, firma, HL7, DICOMweb, preview en vivo, instalador ni video DICOM completo. `create_video_endoscopic()` existe únicamente como interfaz futura y lanza `NotImplementedError`: no encapsula MP4/H.264 de forma ficticia.
+No incluye autenticación, informes, firma, HL7, DICOMweb, instalador ni video DICOM completo. `create_video_endoscopic()` existe únicamente como interfaz futura y lanza `NotImplementedError`: no encapsula MP4/H.264 de forma ficticia.
 
 ## Requisitos
 
@@ -64,7 +66,8 @@ existe, intenta usar el `PATH` del sistema. Tanto la grabación como la creació
 de snapshots comparten este mismo mecanismo.
 
 Para listar la cámara y verificar qué nombre debe copiarse exactamente a
-`video.device_name`, ejecute la aplicación y use “Listar dispositivos de video”.
+`video.device_name`, ejecute la aplicación, abra “Configurar y probar conexiones”
+y use “Detectar dispositivos de video”.
 El diálogo muestra el ejecutable y la versión seleccionados, el comando y toda
 la salida de DirectShow. También puede ejecutar manualmente:
 
@@ -130,16 +133,16 @@ python -m app.main --config C:\ColpoCap\settings.json
 python -m app.main
 ```
 
-1. Use “Probar Worklist” y “Probar PACS”.
-2. Ajuste los filtros y pulse “Buscar”. La fecha actual se aplica por defecto.
-3. Seleccione una fila y pulse “Seleccionar estudio”.
-4. Revise cualquier advertencia de PatientID, AccessionNumber o StudyInstanceUID.
-5. Inicie y detenga la grabación.
-6. Elija el segundo del MP4 y cree el snapshot.
-7. Genere el DICOM y revise advertencias de metadata.
-8. Envíe al PACS. Un envío fallido aparece en “Pendientes” y puede reintentarse.
+1. En el menú principal, use “Configurar y probar conexiones” para editar Worklist, PACS y cámara, guardar los cambios y ejecutar C-ECHO.
+2. Vuelva al menú y elija “Leer Worklist e iniciar estudio”.
+3. Ajuste los filtros y pulse “Buscar”. La fecha actual se aplica por defecto.
+4. Verifique una fila y pulse “Iniciar estudio seleccionado”.
+5. En la pantalla de captura, pulse “Iniciar estudio y cámara”.
+6. Cuando aparezca el video en vivo, pulse “Capturar snapshot” tantas veces como sea necesario. La galería confirma cada imagen.
+7. Pulse “Finalizar y enviar al PACS”. ColpoCap detiene el MP4, genera toda la serie DICOM y envía las imágenes juntas.
+8. Un envío fallido o parcial aparece en el menú principal y puede reintentarse sin reenviar las instancias ya aceptadas.
 
-La UI impide grabar sin estudio, extraer sin MP4, generar sin snapshot y enviar sin DICOM. Si la Worklist no entrega StudyInstanceUID, se genera uno y queda registrado localmente antes de capturar. SeriesInstanceUID y SOPInstanceUID siempre son nuevos.
+La UI impide iniciar sin estudio, capturar antes de recibir un frame y finalizar sin snapshots. Si la Worklist no entrega StudyInstanceUID, se genera uno y queda registrado localmente antes de capturar. Cada estudio usa un SeriesInstanceUID común y un SOPInstanceUID nuevo por snapshot.
 
 ## Archivos y trazabilidad
 
@@ -152,16 +155,18 @@ output/
 │   ├── <PatientID>_<Accession>_<fecha>_<uid>.mp4
 │   └── <mismo_nombre>.ffmpeg.log
 ├── snapshots/
-│   └── <mismo_nombre>_snapshot.jpg
+│   ├── <mismo_nombre>_snapshot_001_<id>.jpg
+│   └── <mismo_nombre>_snapshot_002_<id>.jpg
 └── dicom/
-    └── <mismo_nombre>_snapshot.dcm
+    ├── <mismo_nombre>_snapshot_001_<id>.dcm
+    └── <mismo_nombre>_snapshot_002_<id>.dcm
 logs/
 └── app.log
 ```
 
-Los componentes del nombre se sanitizan. SQLite conserva la ruta del MP4 aunque el objeto enviado al PACS sea únicamente la imagen fija. Cada reintento C-STORE crea una fila nueva en `dicom_exports`, manteniendo status, destino, hora, respuesta y error.
+Los componentes del nombre se sanitizan. SQLite conserva la ruta del MP4 y una fila por imagen en `capture_images`, aunque los objetos enviados al PACS sean las imágenes fijas. Cada intento C-STORE crea filas en `dicom_exports`, manteniendo imagen, status, destino, hora, respuesta y error.
 
-El PixelData DICOM no está comprimido. Como el snapshot operativo se extrae a JPEG, el objeto conserva correctamente `LossyImageCompression = 01` y el método JPEG: descomprimir los píxeles no borra el antecedente de compresión con pérdida.
+El PixelData DICOM no está comprimido. Como el snapshot operativo llega codificado en JPEG, el objeto conserva correctamente `LossyImageCompression = 01` y el método JPEG: descomprimir los píxeles no borra el antecedente de compresión con pérdida.
 
 Estados principales: `SELECTED`, `RECORDING`, `RECORDED`, `SNAPSHOT_CREATED`, `DICOM_CREATED`, `SENT` y `FAILED`.
 
@@ -196,7 +201,7 @@ Configure `config/settings.json` con esos mismos valores en la sección
 python -m app.main
 ```
 
-Pulse “Probar Worklist” y luego “Buscar”. Las entradas que usan
+Pruebe la Worklist desde Configuración y luego búsquela desde su pantalla. Las entradas que usan
 `"scheduled_start_date": "TODAY"` adoptan automáticamente la fecha del día.
 El servidor vuelve a leer `config/mwl.sample.json` en cada C-FIND, por lo que
 los turnos se pueden editar sin reiniciarlo.
@@ -328,8 +333,7 @@ third_party/ffmpeg/windows-x64/
 - No hay Storage Commitment, MPPS ni reconciliación de pacientes. Un status C-STORE exitoso confirma aceptación de la instancia, no retención de largo plazo.
 - La asociación DICOM del MVP no usa TLS.
 - La Worklist puede no entregar StudyInstanceUID; el UID local generado mantiene coherencia entre la captura y la imagen, pero el flujo institucional debe validar la reconciliación posterior.
-- El snapshot se extrae después de detener la grabación; no existe preview ni snapshot vivo.
-- Un MP4 muy corto puede no tener frame en el segundo elegido; seleccione `0.0` o un instante existente.
+- El preview se entrega como JPEG a 10 fps para no bloquear la codificación del MP4; la resolución DICOM corresponde al frame entregado por FFmpeg.
 - La base y los medios no están cifrados y el log no es un audit trail inmutable.
 
 ## Advertencias clínicas y regulatorias
@@ -343,7 +347,7 @@ No use datos reales de pacientes en desarrollo. Valide siempre en pantalla y en 
 1. pruebas de integración automatizadas con Orthanc y un MWL SCP de laboratorio;
 2. colas de reintento automáticas con backoff y estado de red;
 3. usuarios, roles y audit trail protegido;
-4. preview y snapshot vivo sin reemplazar FFmpeg como motor de grabación;
+4. eliminación y reordenamiento de snapshots antes de finalizar;
 5. MPPS/Storage Commitment y reconciliación controlada;
 6. cifrado, hardening y despliegue administrado;
 7. evaluación separada y experimental de Video Endoscopic Image Storage;

@@ -96,8 +96,13 @@ class FFmpegManager:
         time.sleep(0.4)
         if self._process.poll() is not None:
             code = self._process.returncode
+            if self._process.stdin is not None:
+                self._process.stdin.close()
+            if self._process.stdout is not None:
+                self._process.stdout.close()
             self._close_log()
             self._process = None
+            self._current_output = None
             raise FFmpegError(
                 f"FFmpeg terminó al iniciar (código {code}). "
                 f"Revise el dispositivo y el log {log_path}."
@@ -292,9 +297,10 @@ class FFmpegManager:
         if stream is None:
             return
         buffer = bytearray()
+        read_chunk = getattr(stream, "read1", stream.read)
         try:
             while True:
-                chunk = stream.read(64 * 1024)
+                chunk = read_chunk(64 * 1024)
                 if not chunk:
                     break
                 buffer.extend(chunk)

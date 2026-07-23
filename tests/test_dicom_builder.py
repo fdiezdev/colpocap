@@ -126,6 +126,36 @@ def test_builder_pads_odd_length_rgb_pixel_data(tmp_path: Path) -> None:
     assert dataset.LossyImageCompression == "00"
 
 
+def test_builder_reuses_series_uid_and_numbers_batch_instances(tmp_path: Path) -> None:
+    source = tmp_path / "batch.png"
+    Image.new("RGB", (12, 10), color="purple").save(source)
+    builder = DicomBuilder(institution())
+    series_uid = "1.2.826.0.1.3680043.8.498.200"
+
+    first = builder.create_vl_endoscopic_image(
+        snapshot_path=source,
+        output_path=tmp_path / "batch-1.dcm",
+        metadata=metadata(),
+        instance_number=1,
+        series_instance_uid=series_uid,
+    )
+    second = builder.create_vl_endoscopic_image(
+        snapshot_path=source,
+        output_path=tmp_path / "batch-2.dcm",
+        metadata=metadata(),
+        instance_number=2,
+        series_instance_uid=series_uid,
+    )
+
+    first_dataset = dcmread(first.output_path, stop_before_pixels=True)
+    second_dataset = dcmread(second.output_path, stop_before_pixels=True)
+    assert first_dataset.SeriesInstanceUID == series_uid
+    assert second_dataset.SeriesInstanceUID == series_uid
+    assert first_dataset.InstanceNumber == 1
+    assert second_dataset.InstanceNumber == 2
+    assert first_dataset.SOPInstanceUID != second_dataset.SOPInstanceUID
+
+
 def test_video_dicom_is_explicitly_not_implemented() -> None:
     builder = DicomBuilder(institution())
     try:
