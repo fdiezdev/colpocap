@@ -191,6 +191,30 @@ QPushButton#navigationButton:pressed {
     border-color: #27486E;
 }
 
+QPushButton#dangerButton {
+    background-color: #FCE8EC;
+    border-color: #CF5369;
+    color: #A72E43;
+    font-weight: 700;
+}
+
+QPushButton#dangerButton:hover {
+    background-color: #F8D5DC;
+    border-color: #B93F55;
+    color: #8E2236;
+}
+
+QPushButton#dangerButton:pressed {
+    background-color: #F2C2CC;
+    border-color: #A72E43;
+}
+
+QPushButton#dangerButton:disabled {
+    background-color: #F1E9EB;
+    border-color: #DDCDD1;
+    color: #AD9CA0;
+}
+
 QLabel#shortcutHint {
     color: #64788E;
     font-size: 12px;

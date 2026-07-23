@@ -41,6 +41,8 @@ from app.services.export_service import (
 )
 from app.services.study_service import (
     BatchDicomCreationOutcome,
+    SnapshotDeletionOutcome,
+    StudyCancellationOutcome,
     StudySelection,
     StudyService,
 )
@@ -48,7 +50,7 @@ from app.video.capture_manager import CaptureManager
 from app.video.ffmpeg_manager import DeviceDiagnostic
 from app.video.snapshot_manager import SnapshotManager
 from app.dicom.dicom_builder import DicomBuilder
-from .capture_view import CaptureView
+from .capture_view import CaptureView, PreviewLabel
 from .configuration_view import ConfigurationView
 from .theme import APP_STYLESHEET
 from .workers import Worker
@@ -262,6 +264,10 @@ class MainWindow(QMainWindow):
         self.capture_view.back_requested.connect(self._show_worklist)
         self.capture_view.start_requested.connect(self._start_recording)
         self.capture_view.snapshot_requested.connect(self._create_live_snapshot)
+        self.capture_view.snapshot_review_requested.connect(
+            self._show_snapshot_viewer
+        )
+        self.capture_view.cancel_requested.connect(self._confirm_cancel_study)
         self.capture_view.finish_requested.connect(self._show_finish_options)
         self.retry_button.clicked.connect(self._retry_selected)
         self.export_pending_button.clicked.connect(self._export_pending_selected)
@@ -470,6 +476,168 @@ class MainWindow(QMainWindow):
     def _capture_task_finished(self) -> None:
         self._capture_busy = False
         self._sync_capture_state()
+
+    def _show_snapshot_viewer(self, image_id: int) -> None:
+        if self.current_capture is None:
+            return
+        try:
+            image = self.database.get_capture_image(image_id)
+        except LookupError as exc:
+            QMessageBox.warning(self, "Revisar snapshot", str(exc))
+            return
+        if image.capture_id != self.current_capture.id:
+            QMessageBox.warning(
+                self,
+                "Revisar snapshot",
+                "El snapshot seleccionado no pertenece al estudio activo.",
+            )
+            return
+
+        pixmap = QPixmap(image.snapshot_path)
+        if pixmap.isNull():
+            QMessageBox.critical(
+                self,
+                "Revisar snapshot",
+                "No se pudo abrir la imagen seleccionada.",
+            )
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Revisar snapshot {image.instance_number:02d}")
+        dialog.resize(1100, 780)
+        dialog.setMinimumSize(780, 580)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(14)
+
+        details = QLabel(
+            f"Snapshot {image.instance_number:02d}   "
+            f"{pixmap.width()} × {pixmap.height()} píxeles"
+        )
+        details.setObjectName("snapshotsTitle")
+        layout.addWidget(details)
+
+        viewer = PreviewLabel()
+        viewer.setMinimumSize(700, 400)
+        viewer.set_source(pixmap)
+        layout.addWidget(viewer, 1)
+
+        actions = QHBoxLayout()
+        actions.setSpacing(12)
+        delete_button = QPushButton("Eliminar snapshot")
+        delete_button.setObjectName("dangerButton")
+        delete_button.setMinimumHeight(44)
+        actions.addWidget(delete_button)
+        actions.addStretch()
+        keep_button = QPushButton("Conservar y cerrar")
+        keep_button.setObjectName("primaryButton")
+        keep_button.setMinimumHeight(44)
+        keep_button.clicked.connect(dialog.accept)
+        actions.addWidget(keep_button)
+        layout.addLayout(actions)
+
+        delete_button.clicked.connect(
+            lambda: self._confirm_delete_snapshot(dialog, image.id)
+        )
+        dialog.exec()
+
+    def _confirm_delete_snapshot(self, dialog: QDialog, image_id: int) -> None:
+        if self.current_capture is None:
+            dialog.reject()
+            return
+        answer = QMessageBox(self)
+        answer.setIcon(QMessageBox.Icon.Warning)
+        answer.setWindowTitle("Eliminar snapshot")
+        answer.setText("¿Está seguro de que desea eliminar este snapshot?")
+        answer.setInformativeText(
+            "La imagen se eliminará de forma permanente y no se podrá recuperar."
+        )
+        delete_button = answer.addButton(
+            "Sí, eliminar snapshot", QMessageBox.ButtonRole.DestructiveRole
+        )
+        delete_button.setObjectName("dangerButton")
+        keep_button = answer.addButton(
+            "Conservar snapshot", QMessageBox.ButtonRole.RejectRole
+        )
+        answer.setDefaultButton(keep_button)
+        answer.setEscapeButton(keep_button)
+        answer.exec()
+        if answer.clickedButton() is not delete_button:
+            return
+
+        try:
+            outcome: SnapshotDeletionOutcome = self.study_service.delete_snapshot(
+                self.current_capture.id, image_id
+            )
+        except Exception as exc:
+            LOGGER.exception("No se pudo eliminar el snapshot %s", image_id)
+            QMessageBox.critical(self, "Eliminar snapshot", str(exc))
+            return
+
+        self.capture_view.remove_snapshot(outcome.image.id)
+        self.current_capture = self.database.get_capture(self.current_capture.id)
+        self._sync_capture_state("Snapshot eliminado; la cámara continúa activa")
+        dialog.accept()
+        self.statusBar().showMessage(
+            f"Snapshot {outcome.image.instance_number} eliminado", 5000
+        )
+
+    def _confirm_cancel_study(self) -> None:
+        if self.current_capture is None:
+            return
+        warning = QMessageBox(self)
+        warning.setIcon(QMessageBox.Icon.Warning)
+        warning.setWindowTitle("Cancelar estudio")
+        warning.setText("¿Está seguro de que desea cancelar el estudio?")
+        warning.setInformativeText(
+            "Se eliminarán el video y todas las imágenes tomadas. No se almacenarán "
+            "y no se podrán recuperar."
+        )
+        confirm_button = warning.addButton(
+            "Sí, cancelar estudio", QMessageBox.ButtonRole.DestructiveRole
+        )
+        confirm_button.setObjectName("dangerButton")
+        back_button = warning.addButton(
+            "Volver al estudio", QMessageBox.ButtonRole.RejectRole
+        )
+        warning.setDefaultButton(back_button)
+        warning.setEscapeButton(back_button)
+        warning.exec()
+        if warning.clickedButton() is not confirm_button:
+            return
+
+        capture_id = self.current_capture.id
+        self._capture_busy = True
+        self._sync_capture_state("Cancelando y eliminando el estudio…")
+        self._run_async(
+            lambda: self.study_service.cancel_study(capture_id),
+            self._study_cancelled,
+            description="Cancelar estudio",
+            on_error=self._cancel_study_failed,
+        )
+
+    def _study_cancelled(self, outcome: StudyCancellationOutcome) -> None:
+        self._capture_busy = False
+        self.capture_view.clear_session()
+        self.selected_study = None
+        self.current_capture = None
+        self.refresh_pending()
+        self._show_home()
+        QMessageBox.information(
+            self,
+            "Estudio cancelado",
+            "El estudio fue cancelado y todos sus archivos locales fueron eliminados.",
+        )
+        self.statusBar().showMessage(
+            f"Estudio {outcome.study_id} cancelado sin guardar", 8000
+        )
+
+    def _cancel_study_failed(self) -> None:
+        self._capture_busy = False
+        self._reload_current_capture()
+        self._sync_capture_state(
+            "No se pudo completar la cancelación; puede volver a intentarlo"
+        )
 
     def _show_finish_options(self) -> None:
         if self.current_capture is None:
@@ -796,6 +964,7 @@ class MainWindow(QMainWindow):
             can_start=capture is None,
             recording=self.study_service.capture_manager.is_recording,
             snapshot_count=len(images),
+            can_cancel=capture is not None,
             busy=self._capture_busy,
             status_text=status_text,
         )

@@ -67,3 +67,37 @@ def test_brand_navigation_logo_and_snapshot_shortcut() -> None:
     assert "setAutoRepeat(False)" in capture_source
     assert "self._recording and self.snapshot_button.isEnabled()" in capture_source
     assert "#376396" in theme_source
+
+
+def test_active_study_can_be_cancelled_with_destructive_confirmation() -> None:
+    capture_source = (UI_DIRECTORY / "capture_view.py").read_text(encoding="utf-8")
+    main_window_source = (UI_DIRECTORY / "main_window.py").read_text(
+        encoding="utf-8"
+    )
+    theme_source = (UI_DIRECTORY / "theme.py").read_text(encoding="utf-8")
+
+    assert 'QPushButton("Cancelar estudio")' in capture_source
+    assert 'setObjectName("dangerButton")' in capture_source
+    assert "controls.addWidget(self.cancel_button)" in capture_source
+    assert "controls.addWidget(self.finish_button)" in capture_source
+    assert "¿Está seguro de que desea cancelar el estudio?" in main_window_source
+    assert "no se podrán recuperar" in main_window_source
+    assert "self.study_service.cancel_study" in main_window_source
+    assert "QPushButton#dangerButton" in theme_source
+
+
+def test_snapshot_gallery_opens_review_and_supports_deletion() -> None:
+    capture_source = (UI_DIRECTORY / "capture_view.py").read_text(encoding="utf-8")
+    main_window_source = (UI_DIRECTORY / "main_window.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "snapshot_review_requested = Signal(int)" in capture_source
+    assert "itemDoubleClicked" in capture_source
+    assert "QSize(128, 72)" in capture_source
+    assert "setMaximumHeight(122)" in capture_source
+    assert "Doble clic para revisar" in capture_source
+    assert 'QPushButton("Eliminar snapshot")' in main_window_source
+    assert 'QPushButton("Conservar y cerrar")' in main_window_source
+    assert "self.study_service.delete_snapshot" in main_window_source
+    assert "no se podrá recuperar" in main_window_source

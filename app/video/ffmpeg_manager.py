@@ -168,6 +168,39 @@ class FFmpegManager:
         LOGGER.info("Grabación finalizada: %s (%s bytes)", output, output.stat().st_size)
         return output
 
+    def cancel_recording(self, timeout_seconds: float = 5.0) -> Path | None:
+        """Stop an active capture without requiring a valid output video."""
+        process = self._process
+        output = self._current_output
+        if process is None:
+            return output
+        try:
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=timeout_seconds)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=timeout_seconds)
+        finally:
+            for stream in (process.stdin, process.stdout):
+                if stream is not None:
+                    try:
+                        stream.close()
+                    except OSError:
+                        pass
+            preview_thread = self._preview_thread
+            if preview_thread is not None and preview_thread.is_alive():
+                preview_thread.join(timeout=2)
+            self._preview_thread = None
+            self._preview_callback = None
+            self._close_log()
+            self._process = None
+            self._current_output = None
+            self._current_log = None
+        LOGGER.info("Grabación cancelada: %s", output)
+        return output
+
     def list_video_devices(self) -> DeviceDiagnostic:
         executable = self.check_installed()
         system = platform.system()

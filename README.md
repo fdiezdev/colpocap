@@ -172,6 +172,14 @@ python -m app.main
 
 La UI impide iniciar sin estudio, capturar antes de recibir un frame y finalizar sin snapshots. Si la Worklist no entrega StudyInstanceUID, se genera uno y queda registrado localmente antes de capturar. Cada estudio usa un SeriesInstanceUID común y un SOPInstanceUID nuevo por snapshot.
 
+Durante una captura activa, “Cancelar estudio” muestra una confirmación destructiva.
+Si se confirma, ECAP detiene la cámara y elimina el video, los snapshots, los DICOM
+y los registros locales de esa sesión. Esta operación no se puede deshacer.
+
+La galería inferior permite abrir cualquier snapshot con doble clic. El visualizador
+muestra la imagen completa y permite conservarla o eliminarla definitivamente antes
+de finalizar el estudio.
+
 La consola de diagnóstico no aparece durante el estudio. Está disponible en
 Configuración mediante “Ver consola técnica”.
 

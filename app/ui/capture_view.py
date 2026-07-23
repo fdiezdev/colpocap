@@ -59,6 +59,8 @@ class CaptureView(QWidget):
     back_requested = Signal()
     start_requested = Signal()
     snapshot_requested = Signal()
+    snapshot_review_requested = Signal(int)
+    cancel_requested = Signal()
     finish_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -127,9 +129,13 @@ class CaptureView(QWidget):
         controls.addWidget(shortcut_hint)
         controls.addStretch()
 
+        self.cancel_button = QPushButton("Cancelar estudio")
+        self.cancel_button.setObjectName("dangerButton")
+        self.cancel_button.setMinimumHeight(48)
         self.finish_button = QPushButton("Finalizar estudio")
         self.finish_button.setObjectName("primaryButton")
         self.finish_button.setMinimumHeight(62)
+        controls.addWidget(self.cancel_button)
         controls.addWidget(self.finish_button)
         content.addWidget(controls_panel)
 
@@ -140,27 +146,36 @@ class CaptureView(QWidget):
 
         snapshots_panel = QFrame()
         snapshots_panel.setObjectName("snapshotsPanel")
+        snapshots_panel.setMaximumHeight(168)
         snapshots_layout = QVBoxLayout(snapshots_panel)
         snapshots_layout.setContentsMargins(12, 10, 12, 8)
         snapshots_layout.setSpacing(6)
+        snapshots_header = QHBoxLayout()
+        snapshots_header.setSpacing(12)
         self.gallery_title = QLabel("Snapshots (0)")
         self.gallery_title.setObjectName("snapshotsTitle")
-        snapshots_layout.addWidget(self.gallery_title)
+        snapshots_header.addWidget(self.gallery_title)
+        snapshots_header.addStretch()
+        gallery_hint = QLabel("Doble clic para revisar")
+        gallery_hint.setObjectName("shortcutHint")
+        snapshots_header.addWidget(gallery_hint)
+        snapshots_layout.addLayout(snapshots_header)
         self.gallery = QListWidget()
         self.gallery.setViewMode(QListView.IconMode)
         self.gallery.setFlow(QListView.LeftToRight)
         self.gallery.setWrapping(False)
         self.gallery.setResizeMode(QListView.Fixed)
         self.gallery.setMovement(QListView.Static)
-        self.gallery.setIconSize(QSize(160, 90))
-        self.gallery.setGridSize(QSize(180, 122))
-        self.gallery.setSpacing(6)
+        self.gallery.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.gallery.setIconSize(QSize(128, 72))
+        self.gallery.setGridSize(QSize(145, 94))
+        self.gallery.setSpacing(4)
         self.gallery.setUniformItemSizes(True)
         self.gallery.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.gallery.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.gallery.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.gallery.setMinimumHeight(150)
-        self.gallery.setMaximumHeight(175)
+        self.gallery.setMinimumHeight(112)
+        self.gallery.setMaximumHeight(122)
         snapshots_layout.addWidget(self.gallery)
         study_area.addWidget(snapshots_panel)
         content.addLayout(study_area, 1)
@@ -169,6 +184,8 @@ class CaptureView(QWidget):
         self.back_button.clicked.connect(self.back_requested)
         self.start_button.clicked.connect(self.start_requested)
         self.snapshot_button.clicked.connect(self.snapshot_requested)
+        self.gallery.itemDoubleClicked.connect(self._request_snapshot_review)
+        self.cancel_button.clicked.connect(self.cancel_requested)
         self.finish_button.clicked.connect(self.finish_requested)
         self.snapshot_shortcut = QShortcut(
             QKeySequence(Qt.Key.Key_Space), self
@@ -213,10 +230,24 @@ class CaptureView(QWidget):
         item = QListWidgetItem(
             QIcon(pixmap), f"Snapshot {image.instance_number:02d}"
         )
-        item.setToolTip(image.snapshot_path)
+        item.setData(Qt.ItemDataRole.UserRole, image.id)
+        item.setToolTip("Doble clic para revisar este snapshot")
         self.gallery.addItem(item)
         self.gallery.scrollToItem(item, QAbstractItemView.PositionAtCenter)
         self.gallery_title.setText(f"Snapshots ({self.gallery.count()})")
+
+    def remove_snapshot(self, image_id: int) -> None:
+        for row in range(self.gallery.count()):
+            item = self.gallery.item(row)
+            if int(item.data(Qt.ItemDataRole.UserRole)) == image_id:
+                self.gallery.takeItem(row)
+                break
+        self.gallery_title.setText(f"Snapshots ({self.gallery.count()})")
+
+    def _request_snapshot_review(self, item: QListWidgetItem) -> None:
+        image_id = item.data(Qt.ItemDataRole.UserRole)
+        if image_id is not None:
+            self.snapshot_review_requested.emit(int(image_id))
 
     def clear_session(self) -> None:
         self._latest_frame = b""
@@ -232,6 +263,7 @@ class CaptureView(QWidget):
         can_start: bool = True,
         recording: bool = False,
         snapshot_count: int = 0,
+        can_cancel: bool = False,
         busy: bool = False,
         status_text: str | None = None,
     ) -> None:
@@ -242,6 +274,7 @@ class CaptureView(QWidget):
         self.snapshot_button.setEnabled(
             recording and bool(self._latest_frame) and not busy
         )
+        self.cancel_button.setEnabled(can_cancel and not busy)
         self.finish_button.setEnabled(snapshot_count > 0 and not busy)
         self.back_button.setEnabled(not recording and not busy)
         if busy:

@@ -63,5 +63,8 @@ class CaptureManager:
     def stop(self) -> Path:
         return self.ffmpeg.stop_recording()
 
+    def cancel(self) -> Path | None:
+        return self.ffmpeg.cancel_recording()
+
     def diagnose_devices(self) -> DeviceDiagnostic:
         return self.ffmpeg.list_video_devices()

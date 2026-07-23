@@ -42,6 +42,19 @@ class BatchDicomCreationOutcome:
     builds: tuple[DicomBuildResult, ...]
 
 
+@dataclass(frozen=True)
+class StudyCancellationOutcome:
+    study_id: int
+    capture_id: int
+    deleted_files: tuple[Path, ...]
+
+
+@dataclass(frozen=True)
+class SnapshotDeletionOutcome:
+    image: CaptureImageRecord
+    deleted_files: tuple[Path, ...]
+
+
 class StudyService:
     def __init__(
         self,
@@ -144,6 +157,116 @@ class StudyService:
             LOGGER.exception("Falló el cierre de captura %s", capture_id)
             raise
 
+    def cancel_study(self, capture_id: int) -> StudyCancellationOutcome:
+        """Stop and permanently remove an active local study session."""
+        capture = self.database.get_capture(capture_id)
+        images = self.database.list_capture_images(capture_id)
+        cancelled_output = self.capture_manager.cancel()
+
+        candidates = {
+            Path(path)
+            for path in (
+                capture.video_path,
+                capture.snapshot_path,
+                capture.dicom_image_path,
+                capture.dicom_video_path,
+                cancelled_output,
+                *(image.snapshot_path for image in images),
+                *(image.dicom_image_path for image in images),
+            )
+            if path
+        }
+        for video_path in tuple(candidates):
+            if video_path.suffix.lower() == ".mp4":
+                candidates.add(video_path.with_suffix(".ffmpeg.log"))
+
+        owned_files = tuple(
+            sorted(
+                (self._validated_owned_file(path) for path in candidates),
+                key=str,
+            )
+        )
+        deleted: list[Path] = []
+        try:
+            for path in owned_files:
+                existed = path.exists()
+                path.unlink(missing_ok=True)
+                if existed:
+                    deleted.append(path)
+        except OSError as exc:
+            raise StudyWorkflowError(
+                f"No se pudo eliminar por completo el estudio cancelado: {exc}"
+            ) from exc
+
+        study_id = self.database.delete_capture_session(capture_id)
+        if self.selected_study_id == study_id:
+            self.selected_study_id = None
+        LOGGER.warning(
+            "Estudio cancelado y eliminado: estudio=%s captura=%s archivos=%s",
+            study_id,
+            capture_id,
+            len(deleted),
+        )
+        return StudyCancellationOutcome(study_id, capture_id, tuple(deleted))
+
+    def _validated_owned_file(self, path: Path) -> Path:
+        resolved = path.expanduser().resolve()
+        allowed_roots = (
+            self.capture_manager.videos_dir.resolve(),
+            self.snapshots_dir.resolve(),
+            self.dicom_dir.resolve(),
+        )
+        if not any(
+            resolved == root or root in resolved.parents for root in allowed_roots
+        ):
+            raise StudyWorkflowError(
+                f"Se rechazó una ruta ajena al almacenamiento de ECAP: {resolved}"
+            )
+        if resolved.is_dir():
+            raise StudyWorkflowError(
+                f"La ruta registrada para el estudio es una carpeta: {resolved}"
+            )
+        return resolved
+
+    def delete_snapshot(
+        self, capture_id: int, image_id: int
+    ) -> SnapshotDeletionOutcome:
+        """Permanently remove one snapshot while its study is still active."""
+        self.database.get_capture(capture_id)
+        if not self.capture_manager.is_recording:
+            raise StudyWorkflowError(
+                "Los snapshots solo pueden eliminarse durante un estudio activo."
+            )
+        image = self.database.get_capture_image(image_id)
+        if image.capture_id != capture_id:
+            raise StudyWorkflowError(
+                "El snapshot seleccionado no pertenece al estudio activo."
+            )
+
+        candidates = [Path(image.snapshot_path)]
+        if image.dicom_image_path:
+            candidates.append(Path(image.dicom_image_path))
+        owned_files = tuple(self._validated_owned_file(path) for path in candidates)
+        deleted: list[Path] = []
+        try:
+            for path in owned_files:
+                existed = path.exists()
+                path.unlink(missing_ok=True)
+                if existed:
+                    deleted.append(path)
+        except OSError as exc:
+            raise StudyWorkflowError(
+                f"No se pudo eliminar el snapshot seleccionado: {exc}"
+            ) from exc
+
+        removed = self.database.delete_capture_image(image_id)
+        LOGGER.info(
+            "Snapshot descartado durante captura: captura=%s imagen=%s",
+            capture_id,
+            image_id,
+        )
+        return SnapshotDeletionOutcome(removed, tuple(deleted))
+
     def create_snapshot(
         self, capture_id: int, timestamp_seconds: float = 1.0
     ) -> CaptureRecord:
@@ -185,7 +308,9 @@ class StudyService:
                 "La cámara no está activa. Inicie el estudio antes de capturar."
             )
         existing = self.database.list_capture_images(capture_id)
-        instance_number = len(existing) + 1
+        instance_number = max(
+            (image.instance_number for image in existing), default=0
+        ) + 1
         video_stem = Path(capture.video_path or f"capture_{capture.id}").stem
         snapshot_path = self.snapshots_dir / (
             f"{video_stem}_snapshot_{instance_number:03d}_{uuid4().hex[:8]}.jpg"

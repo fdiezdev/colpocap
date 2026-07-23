@@ -301,6 +301,71 @@ class Database:
             raise LookupError(f"No existe la imagen local {image_id}.")
         return self.get_capture_image(image_id)
 
+    def delete_capture_image(self, image_id: int) -> CaptureImageRecord:
+        """Delete one snapshot row and refresh the capture compatibility path."""
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM capture_images WHERE id = ?", (image_id,)
+            ).fetchone()
+            if row is None:
+                raise LookupError(f"No existe la imagen local {image_id}.")
+            image = CaptureImageRecord.from_row(row)
+            connection.execute(
+                "DELETE FROM dicom_exports WHERE image_id = ?", (image_id,)
+            )
+            connection.execute("DELETE FROM capture_images WHERE id = ?", (image_id,))
+            latest = connection.execute(
+                """
+                SELECT snapshot_path FROM capture_images
+                WHERE capture_id = ?
+                ORDER BY instance_number DESC, id DESC
+                LIMIT 1
+                """,
+                (image.capture_id,),
+            ).fetchone()
+            latest_path = str(latest["snapshot_path"]) if latest is not None else None
+            connection.execute(
+                "UPDATE captures SET snapshot_path = ? WHERE id = ?",
+                (latest_path, image.capture_id),
+            )
+        LOGGER.info(
+            "Snapshot local eliminado: captura=%s imagen=%s",
+            image.capture_id,
+            image.id,
+        )
+        return image
+
+    def delete_capture_session(self, capture_id: int) -> int:
+        """Delete one capture and its dependent audit rows atomically.
+
+        The parent study is also removed when this was its only capture. File
+        deletion is deliberately handled by StudyService before this method so
+        the database is retained if the filesystem cleanup cannot complete.
+        """
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT study_id FROM captures WHERE id = ?", (capture_id,)
+            ).fetchone()
+            if row is None:
+                raise LookupError(f"No existe la captura local {capture_id}.")
+            study_id = int(row["study_id"])
+            connection.execute(
+                "DELETE FROM dicom_exports WHERE capture_id = ?", (capture_id,)
+            )
+            connection.execute(
+                "DELETE FROM capture_images WHERE capture_id = ?", (capture_id,)
+            )
+            connection.execute("DELETE FROM captures WHERE id = ?", (capture_id,))
+            remaining = connection.execute(
+                "SELECT 1 FROM captures WHERE study_id = ? LIMIT 1", (study_id,)
+            ).fetchone()
+            if remaining is None:
+                connection.execute("DELETE FROM studies WHERE id = ?", (study_id,))
+        LOGGER.info(
+            "Sesión local eliminada: estudio=%s captura=%s", study_id, capture_id
+        )
+        return study_id
+
     def create_export(
         self,
         *,
