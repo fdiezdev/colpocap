@@ -8,6 +8,7 @@ from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QIcon, QPixmap, QResizeEvent, QTextCursor
 from PySide6.QtWidgets import (
     QFormLayout,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -59,22 +60,25 @@ class CaptureView(QWidget):
     start_requested = Signal()
     snapshot_requested = Signal()
     finish_requested = Signal()
+    local_export_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._latest_frame = b""
         self._recording = False
+        self.setObjectName("page")
         root = QVBoxLayout(self)
+        root.setContentsMargins(30, 26, 30, 26)
+        root.setSpacing(16)
 
         header = QHBoxLayout()
-        self.back_button = QPushButton("← Volver a Worklist")
+        self.back_button = QPushButton("Volver a Worklist")
+        self.back_button.setObjectName("navigationButton")
         title = QLabel("Captura del estudio")
-        title.setStyleSheet("font-size: 24px; font-weight: 600;")
+        title.setObjectName("pageTitle")
         header.addWidget(self.back_button)
         header.addWidget(title)
         header.addStretch()
-        self.step_label = QLabel("Paso 3 de 3")
-        header.addWidget(self.step_label)
         root.addLayout(header)
 
         form = QFormLayout()
@@ -91,16 +95,29 @@ class CaptureView(QWidget):
         self.preview = PreviewLabel()
         camera_column.addWidget(self.preview, 1)
 
-        primary_controls = QHBoxLayout()
-        self.start_button = QPushButton("1. Iniciar estudio y cámara")
-        self.snapshot_button = QPushButton("2. Capturar snapshot")
-        self.finish_button = QPushButton("3. Finalizar y enviar al PACS")
-        for button in (self.start_button, self.snapshot_button, self.finish_button):
+        primary_controls = QGridLayout()
+        primary_controls.setSpacing(10)
+        self.start_button = QPushButton("Iniciar estudio y cámara")
+        self.snapshot_button = QPushButton("Capturar snapshot")
+        self.finish_button = QPushButton("Finalizar y enviar al PACS")
+        self.local_export_button = QPushButton("Finalizar y exportar DICOM")
+        self.start_button.setObjectName("secondaryButton")
+        self.snapshot_button.setObjectName("primaryButton")
+        self.finish_button.setObjectName("primaryButton")
+        self.local_export_button.setObjectName("secondaryButton")
+        for button in (
+            self.start_button,
+            self.snapshot_button,
+            self.finish_button,
+            self.local_export_button,
+        ):
             button.setMinimumHeight(48)
-        self.snapshot_button.setStyleSheet("font-weight: 600;")
-        primary_controls.addWidget(self.start_button)
-        primary_controls.addWidget(self.snapshot_button)
-        primary_controls.addWidget(self.finish_button)
+        primary_controls.addWidget(self.start_button, 0, 0)
+        primary_controls.addWidget(self.snapshot_button, 0, 1)
+        primary_controls.addWidget(self.local_export_button, 1, 0)
+        primary_controls.addWidget(self.finish_button, 1, 1)
+        primary_controls.setColumnStretch(0, 1)
+        primary_controls.setColumnStretch(1, 1)
         camera_column.addLayout(primary_controls)
 
         hint = QLabel(
@@ -135,6 +152,7 @@ class CaptureView(QWidget):
         self.start_button.clicked.connect(self.start_requested)
         self.snapshot_button.clicked.connect(self.snapshot_requested)
         self.finish_button.clicked.connect(self.finish_requested)
+        self.local_export_button.clicked.connect(self.local_export_requested)
         self.set_workflow_state()
 
     @property
@@ -192,6 +210,7 @@ class CaptureView(QWidget):
             recording and bool(self._latest_frame) and not busy
         )
         self.finish_button.setEnabled(snapshot_count > 0 and not busy)
+        self.local_export_button.setEnabled(snapshot_count > 0 and not busy)
         self.back_button.setEnabled(not recording and not busy)
         if busy:
             shown_status = status_text or "Finalizando y enviando…"

@@ -47,6 +47,7 @@ class WorklistItem:
     scheduled_performing_physician_name: str = ""
     scheduled_procedure_step_description: str = ""
     scheduled_procedure_step_id: str = ""
+    source: str = "worklist"
 
     def to_mapping(self) -> dict[str, str]:
         return asdict(self)
@@ -199,4 +200,3 @@ class WorklistClient:
     @staticmethod
     def _text(dataset: Dataset, keyword: str) -> str:
         return str(getattr(dataset, keyword, "") or "")
-

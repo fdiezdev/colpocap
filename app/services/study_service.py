@@ -64,13 +64,14 @@ class StudyService:
         if self.capture_manager.is_recording:
             raise StudyWorkflowError("No se puede cambiar de estudio durante una grabación.")
         values = item.to_mapping()
+        source_label = "carga manual" if item.source == "manual" else "Worklist"
         warnings: list[str] = []
         for key, label in (
             ("patient_id", "PatientID"),
             ("accession_number", "AccessionNumber"),
         ):
             if not values.get(key):
-                warning = f"El estudio seleccionado no contiene {label}."
+                warning = f"El estudio de {source_label} no contiene {label}."
                 warnings.append(warning)
                 LOGGER.warning(warning)
 
@@ -79,11 +80,14 @@ class StudyService:
             generated_uid = new_study_instance_uid()
             reason = "ausente" if not incoming_uid else "inválido"
             warning = (
-                f"StudyInstanceUID {reason} en Worklist; se generó {generated_uid} "
+                f"StudyInstanceUID {reason} en {source_label}; se generó {generated_uid} "
                 "y quedó registrado localmente."
             )
-            warnings.append(warning)
-            LOGGER.warning(warning)
+            if item.source == "manual":
+                LOGGER.info(warning)
+            else:
+                warnings.append(warning)
+                LOGGER.warning(warning)
             values["study_instance_uid"] = generated_uid
 
         study = self.database.create_study(values)

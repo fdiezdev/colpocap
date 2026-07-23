@@ -1,6 +1,6 @@
-# FFmpeg para ColpoCap (Windows x64)
+# FFmpeg para ElectroCap (Windows x64)
 
-Esta carpeta es la ubicación estable del ejecutable que utiliza ColpoCap:
+Esta carpeta es la ubicación estable del ejecutable que utiliza ElectroCap:
 
 ```text
 third_party/ffmpeg/windows-x64/ffmpeg.exe
@@ -23,12 +23,12 @@ Para reemplazar una copia existente, ejecute el script con `-Force`.
 Orden de selección en la aplicación:
 
 1. ruta entregada explícitamente al código;
-2. variable de entorno `COLPOCAP_FFMPEG`;
+2. variable de entorno `ELECTROCAP_FFMPEG`;
 3. este binario incluido en el proyecto;
 4. `ffmpeg` disponible en el `PATH` del sistema.
 
 La compilación distribuida por Gyan está licenciada bajo GPLv3 porque incorpora
-componentes GPL, entre ellos `libx264`. Si se redistribuye ColpoCap junto con el
+componentes GPL, entre ellos `libx264`. Si se redistribuye ElectroCap junto con el
 binario, deben conservarse los avisos de licencia y la información de código
 fuente correspondientes. Consulte `SOURCE.txt` y el archivo `LICENSE` que crea
 el instalador.

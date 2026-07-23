@@ -1,22 +1,27 @@
-# ColpoCap MVP
+# ElectroCap
 
-Estación desktop de captura colposcópica para Windows 10/11. Consulta una DICOM Modality Worklist, asocia el procedimiento elegido con una grabación MP4 local, muestra la cámara en vivo, permite capturar múltiples imágenes y las envía al PACS como una única serie DICOM al finalizar el estudio.
+Estación desktop de captura colposcópica para Windows 10/11. Consulta una DICOM Modality Worklist, permite cargar pacientes manualmente durante una caída de conectividad, asocia el procedimiento elegido con una grabación MP4 local, muestra la cámara en vivo y captura múltiples imágenes. Al finalizar, puede enviar la serie DICOM al PACS o exportarla a una carpeta o unidad extraíble.
 
-El objetivo de esta versión es validar interoperabilidad, trazabilidad y operación segura del flujo básico. La interfaz es deliberadamente simple.
+La aplicación prioriza interoperabilidad, trazabilidad y una operación clínica clara.
 
 ## Alcance exacto
 
-Flujo obligatorio implementado:
+Flujo implementado:
 
 ```text
-menú → MWL C-FIND → selección → cámara + MP4/H.264 local
-     → snapshots JPEG en vivo → finalizar
-     → serie DICOM VL Endoscopic Image → C-ECHO → lote C-STORE PACS
+Menú
+  Worklist C-FIND o carga manual
+  Selección del estudio
+  Cámara y MP4/H.264 local
+  Snapshots JPEG en vivo
+  Serie DICOM VL Endoscopic Image
+  Envío C-STORE al PACS o exportación a carpeta
 ```
 
 Incluye:
 
 - consulta MWL por fecha, PatientName, PatientID y AccessionNumber;
+- carga manual de pacientes cuando la Worklist no está disponible;
 - tabla y selección explícita del estudio;
 - captura FFmpeg/DirectShow en Windows y diagnóstico de dispositivos;
 - preview en vivo obtenido del mismo proceso FFmpeg que graba el MP4;
@@ -26,6 +31,7 @@ Incluye:
 - C-ECHO y envío de todas las instancias mediante una sola asociación C-STORE, con registro individual de cada status DICOM;
 - SQLite local con estudios, capturas y todos los intentos de exportación;
 - reintento manual de pendientes o fallidos;
+- exportación del estudio DICOM a una carpeta local, de red o unidad extraíble;
 - log rotativo en `logs/app.log` y log visible en la UI.
 
 No incluye autenticación, informes, firma, HL7, DICOMweb, instalador ni video DICOM completo. `create_video_endoscopic()` existe únicamente como interfaz futura y lanza `NotImplementedError`: no encapsula MP4/H.264 de forma ficticia.
@@ -60,8 +66,8 @@ su checksum SHA-256 y comprueba que incluya DirectShow. El ejecutable queda en:
 .\third_party\ffmpeg\windows-x64\ffmpeg.exe
 ```
 
-No es necesario agregarlo al `PATH`. ColpoCap elige primero una ruta explícita,
-luego `COLPOCAP_FFMPEG`, después el binario incluido y, solamente si este no
+No es necesario agregarlo al `PATH`. ElectroCap elige primero una ruta explícita,
+luego `ELECTROCAP_FFMPEG`, después el binario incluido y, solamente si este no
 existe, intenta usar el `PATH` del sistema. Tanto la grabación como la creación
 de snapshots comparten este mismo mecanismo.
 
@@ -87,9 +93,9 @@ La aplicación carga `config/settings.json` por defecto. El repositorio entrega 
 
 ```json
 {
-  "local_ae_title": "COLPOCAP_MVP",
+  "local_ae_title": "ELECTROCAP",
   "worklist": {
-    "ae_title": "COLPOCAP_WL",
+    "ae_title": "ELECTROCAP_WL",
     "host": "127.0.0.1",
     "port": 11112
   },
@@ -106,10 +112,10 @@ La aplicación carga `config/settings.json` por defecto. El repositorio entrega 
   },
   "institution": {
     "name": "Instituto de Diagnóstico por Imágenes",
-    "station_name": "COLPOSCOPY_CAPTURE_01",
+    "station_name": "ELECTROCAP",
     "manufacturer": "Custom",
-    "manufacturer_model_name": "Colposcopy Capture MVP",
-    "software_version": "0.1.0"
+    "manufacturer_model_name": "ElectroCap",
+    "software_version": "1.0.0"
   },
   "storage": {
     "base_output_dir": "./output"
@@ -119,13 +125,25 @@ La aplicación carga `config/settings.json` por defecto. El repositorio entrega 
 
 Las rutas relativas de almacenamiento se resuelven respecto de la raíz del proyecto. No hay AE Titles, hosts, puertos, directorios clínicos ni dispositivos embebidos en el código. Los AE Titles se validan a un máximo de 16 caracteres.
 
-`StationName` tiene VR DICOM SH (máximo 16 caracteres). El valor de ejemplo es más largo para conservar el requisito recibido; al generar DICOM se trunca con una advertencia explícita en UI y log. En producción conviene configurarlo directamente con 16 caracteres o menos.
+`StationName` tiene VR DICOM SH y admite un máximo de 16 caracteres.
 
 También se puede indicar otra configuración:
 
 ```powershell
 python -m app.main --config C:\ColpoCap\settings.json
 ```
+
+## Logo
+
+La pantalla principal carga el logo desde esta ruta exacta:
+
+```text
+assets/electrocap_logo.png
+```
+
+Se recomienda un PNG horizontal con fondo transparente y al menos 960 × 290
+píxeles. Al reemplazar o agregar el archivo, reinicie la aplicación. Si no está
+disponible, la interfaz muestra el nombre ElectroCap como respaldo.
 
 ## Ejecución y operación
 
@@ -135,12 +153,12 @@ python -m app.main
 
 1. En el menú principal, use “Configurar y probar conexiones” para editar Worklist, PACS y cámara, guardar los cambios y ejecutar C-ECHO.
 2. Vuelva al menú y elija “Leer Worklist e iniciar estudio”.
-3. Ajuste los filtros y pulse “Buscar”. La fecha actual se aplica por defecto.
+3. Ajuste los filtros y pulse “Buscar en Worklist”. La fecha actual se aplica por defecto. Si la Worklist no está disponible, use “Cargar paciente manualmente”, verifique la identidad y agregue la entrada a la misma tabla.
 4. Verifique una fila y pulse “Iniciar estudio seleccionado”.
 5. En la pantalla de captura, pulse “Iniciar estudio y cámara”.
 6. Cuando aparezca el video en vivo, pulse “Capturar snapshot” tantas veces como sea necesario. La galería confirma cada imagen.
-7. Pulse “Finalizar y enviar al PACS”. ColpoCap detiene el MP4, genera toda la serie DICOM y envía las imágenes juntas.
-8. Un envío fallido o parcial aparece en el menú principal y puede reintentarse sin reenviar las instancias ya aceptadas.
+7. Use “Finalizar y enviar al PACS” para el flujo conectado o “Finalizar y exportar DICOM” para elegir una carpeta o unidad extraíble. ElectroCap crea una subcarpeta por estudio y copia todas las instancias como `IM_0001.dcm`, `IM_0002.dcm` y sucesivas.
+8. Un envío fallido o parcial aparece en el menú principal. Desde allí puede reintentarse o exportarse a una carpeta sin reenviar las instancias ya aceptadas.
 
 La UI impide iniciar sin estudio, capturar antes de recibir un frame y finalizar sin snapshots. Si la Worklist no entrega StudyInstanceUID, se genera uno y queda registrado localmente antes de capturar. Cada estudio usa un SeriesInstanceUID común y un SOPInstanceUID nuevo por snapshot.
 
@@ -187,8 +205,8 @@ python -m app.dicom.mwl_server
 Los parámetros predeterminados son:
 
 ```text
-Called AE Title:  COLPOCAP_WL
-Calling AE permitido: COLPOCAP_MVP
+Called AE Title:  ELECTROCAP_WL
+Calling AE permitido: ELECTROCAP
 IP:               127.0.0.1
 Puerto:           11112
 Turnos:           config/mwl.sample.json
@@ -210,7 +228,7 @@ También se puede probar directamente con el `findscu` instalado por
 `pynetdicom`:
 
 ```powershell
-.\.venv\Scripts\findscu.exe -v -W -aet COLPOCAP_MVP -aec COLPOCAP_WL -k PatientID=PID-001 127.0.0.1 11112
+.\.venv\Scripts\findscu.exe -v -W -aet ELECTROCAP -aec ELECTROCAP_WL -k PatientID=PID-001 127.0.0.1 11112
 ```
 
 Para usar otro archivo, puerto o AE Title:
@@ -220,7 +238,7 @@ python -m app.dicom.mwl_server `
   --data C:\ColpoCap\turnos-prueba.json `
   --ae-title MWL_PRUEBA `
   --port 11113 `
-  --allow-calling-ae COLPOCAP_MVP
+  --allow-calling-ae ELECTROCAP
 ```
 
 El listener usa `127.0.0.1` de forma predeterminada para no exponer datos de
@@ -236,7 +254,7 @@ Para un entorno **exclusivamente local de desarrollo**, puede usar este fragment
 
 ```json
 {
-  "Name": "ColpoCap Test PACS",
+  "Name": "ElectroCap Test PACS",
   "DicomServerEnabled": true,
   "DicomAet": "ORTHANC",
   "DicomPort": 4242,
@@ -248,7 +266,7 @@ Para un entorno **exclusivamente local de desarrollo**, puede usar este fragment
 
 No exponga esta configuración sin autenticación fuera de `localhost`. Para una red clínica aplique las recomendaciones oficiales de [seguridad de Orthanc](https://orthanc.uclouvain.be/book/faq/security.html).
 
-Configure ColpoCap así:
+Configure ElectroCap así:
 
 ```json
 "pacs": {
@@ -331,14 +349,14 @@ third_party/ffmpeg/windows-x64/
 - No hay video DICOM. `Video Endoscopic Image Storage` requiere seleccionar y validar perfiles MPEG/H.264, transfer syntaxes, encapsulación, offsets y compatibilidad real del PACS. Una fase futura debe evaluar DCMTK, dcm4che u otra implementación especializada con archivos de conformidad y pruebas contra el PACS objetivo.
 - El MP4/H.264 local no se envía al PACS y debe incluirse en la política institucional de retención, respaldo y recuperación.
 - No hay Storage Commitment, MPPS ni reconciliación de pacientes. Un status C-STORE exitoso confirma aceptación de la instancia, no retención de largo plazo.
-- La asociación DICOM del MVP no usa TLS.
+- La asociación DICOM de esta versión no usa TLS.
 - La Worklist puede no entregar StudyInstanceUID; el UID local generado mantiene coherencia entre la captura y la imagen, pero el flujo institucional debe validar la reconciliación posterior.
 - El preview se entrega como JPEG a 10 fps para no bloquear la codificación del MP4; la resolución DICOM corresponde al frame entregado por FFmpeg.
 - La base y los medios no están cifrados y el log no es un audit trail inmutable.
 
 ## Advertencias clínicas y regulatorias
 
-Este repositorio es un MVP técnico, no un producto sanitario validado ni autorizado para diagnóstico. Antes de uso clínico se requieren, como mínimo: gestión de riesgos, ingeniería de usabilidad, ciberseguridad, control de acceso, identificación de operador, protección de datos personales, validación del hardware de captura, pruebas de interoperabilidad con la declaración de conformidad DICOM del PACS, respaldo/retención, monitoreo, procedimientos ante downtime y validación regulatoria aplicable.
+Este repositorio no representa por sí solo un producto sanitario validado ni autorizado para diagnóstico. Antes de uso clínico se requieren, como mínimo: gestión de riesgos, ingeniería de usabilidad, ciberseguridad, control de acceso, identificación de operador, protección de datos personales, validación del hardware de captura, pruebas de interoperabilidad con la declaración de conformidad DICOM del PACS, respaldo/retención, monitoreo, procedimientos ante downtime y validación regulatoria aplicable.
 
 No use datos reales de pacientes en desarrollo. Valide siempre en pantalla y en el PACS que PatientID, AccessionNumber y StudyInstanceUID corresponden a la persona y procedimiento seleccionados.
 

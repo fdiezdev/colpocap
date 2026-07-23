@@ -23,7 +23,7 @@ def test_store_many_uses_one_association_for_all_instances(
     source = tmp_path / "source.png"
     Image.new("RGB", (8, 8), color="orange").save(source)
     builder = DicomBuilder(
-        InstitutionConfig("Test", "COLPO", "Custom", "MVP", "0.1")
+        InstitutionConfig("Test", "COLPO", "Custom", "ElectroCap", "1.0")
     )
     paths = []
     for instance_number in (1, 2):
@@ -69,7 +69,7 @@ def test_store_many_uses_one_association_for_all_instances(
 
     monkeypatch.setattr("app.dicom.store_client.AE", FakeAE)
     client = StoreClient(
-        "COLPOCAP", DicomEndpointConfig("ORTHANC", "127.0.0.1", 4242)
+        "ELECTROCAP", DicomEndpointConfig("ORTHANC", "127.0.0.1", 4242)
     )
     results = client.store_many(paths)
 
@@ -78,4 +78,3 @@ def test_store_many_uses_one_association_for_all_instances(
     assert len(fake_ae.association.sent) == 2
     assert fake_ae.association.released
     assert all(result.success for result in results)
-

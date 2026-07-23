@@ -27,12 +27,16 @@ class ConfigurationView(QWidget):
 
     def __init__(self, settings: Settings, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setObjectName("page")
         root = QVBoxLayout(self)
+        root.setContentsMargins(30, 26, 30, 26)
+        root.setSpacing(15)
 
         header = QHBoxLayout()
-        self.back_button = QPushButton("← Menú principal")
+        self.back_button = QPushButton("Menú principal")
+        self.back_button.setObjectName("navigationButton")
         title = QLabel("Configuración")
-        title.setStyleSheet("font-size: 24px; font-weight: 600;")
+        title.setObjectName("pageTitle")
         header.addWidget(self.back_button)
         header.addWidget(title)
         header.addStretch()
@@ -43,6 +47,7 @@ class ConfigurationView(QWidget):
             "antes de guardar los cambios."
         )
         explanation.setWordWrap(True)
+        explanation.setObjectName("supportingText")
         root.addWidget(explanation)
 
         local_box = QGroupBox("Estación local")
@@ -61,6 +66,7 @@ class ConfigurationView(QWidget):
         self.worklist_port = self._port_field()
         self.worklist_status = QLabel("No probado")
         self.worklist_test_button = QPushButton("Probar Worklist")
+        self.worklist_test_button.setObjectName("secondaryButton")
         worklist_form.addRow("AE Title:", self.worklist_ae)
         worklist_form.addRow("Host / IP:", self.worklist_host)
         worklist_form.addRow("Puerto:", self.worklist_port)
@@ -75,6 +81,7 @@ class ConfigurationView(QWidget):
         self.pacs_port = self._port_field()
         self.pacs_status = QLabel("No probado")
         self.pacs_test_button = QPushButton("Probar PACS")
+        self.pacs_test_button.setObjectName("secondaryButton")
         pacs_form.addRow("AE Title:", self.pacs_ae)
         pacs_form.addRow("Host / IP:", self.pacs_host)
         pacs_form.addRow("Puerto:", self.pacs_port)
@@ -90,6 +97,7 @@ class ConfigurationView(QWidget):
         self.fps.setRange(1, 120)
         self.bitrate = QLineEdit()
         self.devices_button = QPushButton("Detectar dispositivos de video")
+        self.devices_button.setObjectName("secondaryButton")
         camera_form.addRow("Dispositivo:", self.device_name)
         camera_form.addRow("Resolución:", self.resolution)
         camera_form.addRow("FPS:", self.fps)
@@ -100,6 +108,7 @@ class ConfigurationView(QWidget):
         footer = QHBoxLayout()
         footer.addStretch()
         self.save_button = QPushButton("Guardar configuración")
+        self.save_button.setObjectName("primaryButton")
         self.save_button.setMinimumHeight(42)
         footer.addWidget(self.save_button)
         root.addLayout(footer)
@@ -162,5 +171,8 @@ class ConfigurationView(QWidget):
     def show_connection_result(self, target: str, success: bool, message: str) -> None:
         label = self.worklist_status if target == "worklist" else self.pacs_status
         label.setText(("Conectado: " if success else "Falló: ") + message)
-        label.setStyleSheet("color: green" if success else "color: red")
-
+        label.setStyleSheet(
+            "color: #17705F; font-weight: 600;"
+            if success
+            else "color: #B33A3A; font-weight: 600;"
+        )

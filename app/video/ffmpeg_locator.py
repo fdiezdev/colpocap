@@ -1,4 +1,4 @@
-"""Locate and validate the FFmpeg executable used by ColpoCap."""
+"""Locate and validate the FFmpeg executable used by ElectroCap."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def locate_ffmpeg(
 ) -> FFmpegInstallation:
     """Select one deterministic FFmpeg binary and verify that it is usable.
 
-    Selection order is: explicit constructor argument, ``COLPOCAP_FFMPEG``,
+    Selection order is: explicit constructor argument, ``ELECTROCAP_FFMPEG``,
     the project-owned Windows binary, and finally the operating system PATH.
     A configured or bundled binary that exists but is invalid is reported
     instead of silently selecting a different installation.
@@ -58,10 +58,10 @@ def locate_ffmpeg(
     configured: tuple[str, str] | None = None
     if executable is not None and str(executable).strip():
         configured = (_clean_configured_path(str(executable)), "parámetro explícito")
-    elif active_environment.get("COLPOCAP_FFMPEG", "").strip():
+    elif active_environment.get("ELECTROCAP_FFMPEG", "").strip():
         configured = (
-            _clean_configured_path(active_environment["COLPOCAP_FFMPEG"]),
-            "variable COLPOCAP_FFMPEG",
+            _clean_configured_path(active_environment["ELECTROCAP_FFMPEG"]),
+            "variable ELECTROCAP_FFMPEG",
         )
 
     if configured is not None:
@@ -95,7 +95,7 @@ def locate_ffmpeg(
         "No se encontró FFmpeg. Ejecute "
         ".\\scripts\\install_ffmpeg_windows.ps1 desde la raíz del proyecto. "
         f"Se esperaba el binario en {bundled_hint}. También puede definir "
-        "COLPOCAP_FFMPEG con una ruta completa válida."
+        "ELECTROCAP_FFMPEG con una ruta completa válida."
     )
 
 

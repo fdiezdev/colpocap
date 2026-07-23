@@ -123,7 +123,7 @@ class DicomBuilder:
         file_meta.MediaStorageSOPInstanceUID = sop_uid
         file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
         file_meta.ImplementationClassUID = PYDICOM_IMPLEMENTATION_UID
-        file_meta.ImplementationVersionName = "COLPOCAP_0_1"
+        file_meta.ImplementationVersionName = "ELECTROCAP_1_0"
 
         dataset = FileDataset(
             str(destination), {}, file_meta=file_meta, preamble=b"\0" * 128
@@ -272,7 +272,8 @@ class DicomBuilder:
     def create_video_endoscopic(self, *_args: Any, **_kwargs: Any) -> None:
         """Reserved for a future, validated MPEG/H.264 DICOM encapsulation path."""
         raise NotImplementedError(
-            "Video Endoscopic Image Storage es experimental y no forma parte del MVP. "
+            "Video Endoscopic Image Storage es experimental y no forma parte de esta "
+            "versión. "
             "El MP4 permanece local y trazable; no se realizará encapsulación insegura."
         )
 

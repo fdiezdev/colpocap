@@ -41,7 +41,7 @@ def test_c_echo_c_store_and_mwl_c_find_roundtrip(tmp_path: Path) -> None:
         response.RequestedProcedureDescription = "COLPOSCOPIA"
         response.ReferringPhysicianName = "DOCTOR^TEST"
         step = Dataset()
-        step.ScheduledStationAETitle = "COLPOCAP_MVP"
+        step.ScheduledStationAETitle = "ELECTROCAP"
         step.ScheduledProcedureStepStartDate = "20260714"
         step.ScheduledProcedureStepStartTime = "120000"
         step.Modality = "ES"
@@ -75,7 +75,7 @@ def test_c_echo_c_store_and_mwl_c_find_roundtrip(tmp_path: Path) -> None:
         Image.new("RGB", (10, 10), color="green").save(source)
         dicom_path = tmp_path / "network.dcm"
         DicomBuilder(
-            InstitutionConfig("Test", "COLPO", "Custom", "MVP", "0.1.0")
+            InstitutionConfig("Test", "COLPO", "Custom", "ElectroCap", "1.0.0")
         ).create_vl_endoscopic_image(
             snapshot_path=source,
             output_path=dicom_path,
@@ -89,13 +89,13 @@ def test_c_echo_c_store_and_mwl_c_find_roundtrip(tmp_path: Path) -> None:
             },
         )
 
-        store_client = StoreClient("COLPOCAP_MVP", endpoint)
+        store_client = StoreClient("ELECTROCAP", endpoint)
         assert store_client.echo().success
         store_result = store_client.store(dicom_path)
         assert store_result.success
         assert store_result.status_hex == "0x0000"
 
-        worklist_client = WorklistClient("COLPOCAP_MVP", endpoint)
+        worklist_client = WorklistClient("ELECTROCAP", endpoint)
         results = worklist_client.find(
             WorklistQuery(
                 scheduled_date="20260714",

@@ -35,7 +35,7 @@ def institution() -> InstitutionConfig:
         name="Instituto de Prueba",
         station_name="COLPOSCOPY_CAPTURE_01",
         manufacturer="Custom",
-        manufacturer_model_name="Colposcopy Capture MVP",
+        manufacturer_model_name="ElectroCap",
         software_version="0.1.0",
     )
 
@@ -161,6 +161,6 @@ def test_video_dicom_is_explicitly_not_implemented() -> None:
     try:
         builder.create_video_endoscopic()
     except NotImplementedError as exc:
-        assert "no forma parte del MVP" in str(exc)
+        assert "no forma parte de esta versión" in str(exc)
     else:
         raise AssertionError("La encapsulación de video no debe simularse")

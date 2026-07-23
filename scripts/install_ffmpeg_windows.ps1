@@ -14,13 +14,13 @@ $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $TargetDirectory = Join-Path $ProjectRoot "third_party\ffmpeg\windows-x64"
 $TargetExecutable = Join-Path $TargetDirectory "ffmpeg.exe"
 $TemporaryDirectory = Join-Path ([System.IO.Path]::GetTempPath()) (
-    "colpocap-ffmpeg-" + [System.Guid]::NewGuid().ToString("N")
+    "electrocap-ffmpeg-" + [System.Guid]::NewGuid().ToString("N")
 )
 $ArchivePath = Join-Path $TemporaryDirectory $ArchiveName
 $ExtractedDirectory = Join-Path $TemporaryDirectory "extracted"
 
 if (-not [Environment]::Is64BitOperatingSystem) {
-    throw "ColpoCap requiere Windows de 64 bits para usar esta compilación de FFmpeg."
+    throw "ElectroCap requiere Windows de 64 bits para usar esta compilación de FFmpeg."
 }
 
 if ((Test-Path -LiteralPath $TargetExecutable) -and -not $Force) {

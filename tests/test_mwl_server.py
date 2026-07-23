@@ -30,7 +30,7 @@ def write_worklists(path: Path) -> None:
                     "requested_procedure_id": "RP-001",
                     "requested_procedure_description": "COLPOSCOPIA",
                     "referring_physician_name": "DOCTOR^TEST",
-                    "scheduled_station_ae_title": "COLPOCAP_MVP",
+                    "scheduled_station_ae_title": "ELECTROCAP",
                     "scheduled_start_date": "TODAY",
                     "scheduled_start_time": "090000",
                     "modality": "ES",
@@ -42,7 +42,7 @@ def write_worklists(path: Path) -> None:
                     "patient_name": "TEST^BEA",
                     "patient_id": "PID-002",
                     "accession_number": "ACC-002",
-                    "scheduled_station_ae_title": "COLPOCAP_MVP",
+                    "scheduled_station_ae_title": "ELECTROCAP",
                     "scheduled_start_date": "20260115",
                     "scheduled_start_time": "100000",
                     "modality": "ES",
@@ -101,8 +101,8 @@ def test_server_answers_real_echo_and_mwl_find(tmp_path: Path) -> None:
         except PermissionError:
             pytest.skip("El sandbox no permite abrir un listener DICOM local")
 
-        endpoint = DicomEndpointConfig("COLPOCAP_WL", "127.0.0.1", server.bound_port)
-        client = WorklistClient("COLPOCAP_MVP", endpoint)
+        endpoint = DicomEndpointConfig("ELECTROCAP_WL", "127.0.0.1", server.bound_port)
+        client = WorklistClient("ELECTROCAP", endpoint)
 
         assert client.echo().success
         results = client.find(

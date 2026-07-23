@@ -1,4 +1,4 @@
-"""ColpoCap MVP desktop entry point."""
+"""ElectroCap desktop entry point."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from app.ui.main_window import MainWindow
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="ColpoCap MVP")
+    parser = argparse.ArgumentParser(description="ElectroCap")
     parser.add_argument(
         "--config",
         type=Path,
@@ -28,7 +28,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     arguments = build_parser().parse_args(argv)
     qt_app = QApplication(sys.argv[:1])
-    qt_app.setApplicationName("ColpoCap MVP")
+    qt_app.setApplicationName("ElectroCap")
+    qt_app.setApplicationDisplayName("ElectroCap")
     try:
         settings = load_settings(arguments.config)
         settings.prepare_directories()
@@ -38,7 +39,7 @@ def main(argv: list[str] | None = None) -> int:
 
     configure_logging(settings.log_path)
     logger = logging.getLogger(__name__)
-    logger.info("Inicio de ColpoCap MVP")
+    logger.info("Inicio de ElectroCap")
     logger.info("Configuración cargada desde %s", settings.config_path)
 
     def log_unhandled(
@@ -66,4 +67,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

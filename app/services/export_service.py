@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 import logging
 from pathlib import Path
+import re
+import shutil
+import unicodedata
+from uuid import uuid4
 
 from pydicom import dcmread
 
@@ -37,6 +42,14 @@ class BatchExportOutcome:
     message: str
 
 
+@dataclass(frozen=True)
+class FolderExportOutcome:
+    capture_id: int
+    directory: Path
+    files: tuple[Path, ...]
+    message: str
+
+
 class ExportService:
     def __init__(self, database: Database, store_client: StoreClient) -> None:
         self.database = database
@@ -44,6 +57,94 @@ class ExportService:
 
     def test_pacs(self) -> EchoResult:
         return self.store_client.echo()
+
+    def export_capture_images(
+        self, capture_id: int, destination_directory: str | Path
+    ) -> FolderExportOutcome:
+        """Copy a complete DICOM study to a new folder on local/removable media."""
+        capture = self.database.get_capture(capture_id)
+        study = self.database.get_study(capture.study_id)
+        images = self.database.list_capture_images(capture_id)
+        if images:
+            missing = [
+                image.instance_number
+                for image in images
+                if not image.dicom_image_path
+            ]
+            if missing:
+                shown = ", ".join(str(number) for number in missing)
+                raise ExportWorkflowError(
+                    f"Las imágenes {shown} todavía no tienen un DICOM generado."
+                )
+            source_paths = [
+                Path(str(image.dicom_image_path))
+                for image in sorted(images, key=lambda item: item.instance_number)
+            ]
+        elif capture.dicom_image_path:
+            source_paths = [Path(capture.dicom_image_path)]
+        else:
+            raise ExportWorkflowError(
+                "No hay imágenes DICOM preparadas para exportar en este estudio."
+            )
+
+        for source in source_paths:
+            if not source.is_file():
+                raise ExportWorkflowError(f"No existe el DICOM registrado: {source}")
+            try:
+                dataset = dcmread(source, stop_before_pixels=True)
+                str(dataset.SOPClassUID)
+                str(dataset.SOPInstanceUID)
+            except Exception as exc:
+                raise ExportWorkflowError(
+                    f"El archivo no es un DICOM válido: {source.name}: {exc}"
+                ) from exc
+
+        destination_root = Path(destination_directory).expanduser()
+        if not destination_root.is_dir():
+            raise ExportWorkflowError(
+                f"La carpeta de destino no existe: {destination_root}"
+            )
+
+        timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
+        patient = self._safe_path_part(study.patient_id, "SIN_ID")
+        accession = self._safe_path_part(study.accession_number, "SIN_ACCESSION")
+        base_name = f"ElectroCap_{patient}_{accession}_{timestamp}"
+        final_directory = self._available_directory(destination_root, base_name)
+        staging_directory = destination_root / (
+            f".electrocap-export-{uuid4().hex}.tmp"
+        )
+
+        exported_files: list[Path] = []
+        try:
+            staging_directory.mkdir()
+            for number, source in enumerate(source_paths, start=1):
+                destination = staging_directory / f"IM_{number:04d}.dcm"
+                shutil.copy2(source, destination)
+                exported_files.append(destination)
+            staging_directory.rename(final_directory)
+        except Exception as exc:
+            shutil.rmtree(staging_directory, ignore_errors=True)
+            raise ExportWorkflowError(
+                f"No se pudo exportar el estudio a {destination_root}: {exc}"
+            ) from exc
+
+        final_files = tuple(final_directory / path.name for path in exported_files)
+        LOGGER.info(
+            "Captura %s exportada a %s con %s DICOM",
+            capture_id,
+            final_directory,
+            len(final_files),
+        )
+        return FolderExportOutcome(
+            capture_id=capture_id,
+            directory=final_directory,
+            files=final_files,
+            message=(
+                f"Estudio exportado: {len(final_files)} "
+                f"{'archivo' if len(final_files) == 1 else 'archivos'} DICOM en "
+                f"{final_directory}."
+            ),
+        )
 
     def send_capture(self, capture_id: int) -> ExportOutcome:
         capture = self.database.get_capture(capture_id)
@@ -234,3 +335,19 @@ class ExportService:
         if self.database.list_capture_images(capture_id):
             return self.send_capture_images(capture_id)
         return self.send_capture(capture_id)
+
+    @staticmethod
+    def _safe_path_part(value: str, fallback: str) -> str:
+        normalized = unicodedata.normalize("NFKD", value)
+        ascii_value = normalized.encode("ascii", "ignore").decode("ascii")
+        safe = re.sub(r"[^A-Za-z0-9._-]+", "_", ascii_value).strip("._-")
+        return (safe or fallback)[:40]
+
+    @staticmethod
+    def _available_directory(root: Path, base_name: str) -> Path:
+        candidate = root / base_name
+        suffix = 2
+        while candidate.exists():
+            candidate = root / f"{base_name}_{suffix:02d}"
+            suffix += 1
+        return candidate

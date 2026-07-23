@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any, Callable
 
 from PySide6.QtCore import QObject, QThreadPool, Qt, Signal
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtGui import QCloseEvent, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -35,6 +37,7 @@ from app.services.export_service import (
     BatchExportOutcome,
     ExportOutcome,
     ExportService,
+    FolderExportOutcome,
 )
 from app.services.study_service import (
     BatchDicomCreationOutcome,
@@ -47,10 +50,12 @@ from app.video.snapshot_manager import SnapshotManager
 from app.dicom.dicom_builder import DicomBuilder
 from .capture_view import CaptureView
 from .configuration_view import ConfigurationView
+from .theme import APP_STYLESHEET
 from .workers import Worker
 from .worklist_view import WorklistView
 
 LOGGER = logging.getLogger(__name__)
+LOGO_PATH = Path(__file__).resolve().parents[2] / "assets" / "electrocap_logo.png"
 
 
 class LogBridge(QObject):
@@ -85,8 +90,10 @@ class MainWindow(QMainWindow):
         self._capture_busy = False
 
         self._configure_services(settings)
-        self.setWindowTitle("ColpoCap - Captura colposcópica DICOM")
+        self.setWindowTitle("ElectroCap - Captura colposcópica DICOM")
         self.resize(1320, 900)
+        self.setMinimumSize(1080, 720)
+        self.setStyleSheet(APP_STYLESHEET)
         self._build_ui()
         self._connect_signals()
         self._install_bridges()
@@ -113,7 +120,9 @@ class MainWindow(QMainWindow):
 
     def _build_ui(self) -> None:
         central = QWidget()
+        central.setObjectName("appRoot")
         root = QVBoxLayout(central)
+        root.setContentsMargins(0, 0, 0, 0)
         self.stack = QStackedWidget()
         root.addWidget(self.stack)
 
@@ -132,34 +141,38 @@ class MainWindow(QMainWindow):
 
     def _build_home_page(self) -> QWidget:
         page = QWidget()
+        page.setObjectName("page")
         layout = QVBoxLayout(page)
-        layout.addStretch()
-        title = QLabel("ColpoCap")
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 34px; font-weight: 700;")
-        subtitle = QLabel(
-            "Seleccione qué desea hacer. El proceso clínico está organizado en "
-            "Worklist → selección → captura → envío."
-        )
-        subtitle.setAlignment(Qt.AlignCenter)
-        subtitle.setWordWrap(True)
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
+        layout.setContentsMargins(34, 26, 34, 28)
+        layout.setSpacing(18)
+
+        self.logo_label = QLabel()
+        self.logo_label.setAlignment(Qt.AlignCenter)
+        self.logo_label.setMinimumHeight(118)
+        self.logo_label.setToolTip(f"Logo de la aplicación: {LOGO_PATH}")
+        logo = QPixmap(str(LOGO_PATH))
+        if logo.isNull():
+            self.logo_label.setText("ElectroCap")
+            self.logo_label.setObjectName("brandFallback")
+        else:
+            self.logo_label.setPixmap(
+                logo.scaled(480, 145, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
+        layout.addWidget(self.logo_label)
 
         actions = QHBoxLayout()
+        actions.setSpacing(16)
         actions.addStretch()
-        self.configuration_button = QPushButton("⚙ Configurar y probar conexiones")
-        self.worklist_button = QPushButton("Leer Worklist e iniciar estudio →")
-        for button in (self.configuration_button, self.worklist_button):
-            button.setMinimumSize(330, 78)
-            button.setStyleSheet("font-size: 16px; font-weight: 600;")
-        actions.addWidget(self.configuration_button)
+        self.worklist_button = QPushButton("Leer Worklist e iniciar estudio")
+        self.worklist_button.setObjectName("heroPrimaryButton")
+        self.configuration_button = QPushButton("Configurar y probar conexiones")
+        self.configuration_button.setObjectName("heroSecondaryButton")
         actions.addWidget(self.worklist_button)
+        actions.addWidget(self.configuration_button)
         actions.addStretch()
         layout.addLayout(actions)
-        layout.addStretch()
 
-        pending_box = QGroupBox("Estudios pendientes o con envío incompleto")
+        pending_box = QGroupBox("Estudios pendientes de envío al PACS")
         pending_layout = QVBoxLayout(pending_box)
         self.pending_table = QTableWidget(0, 7)
         self.pending_table.setHorizontalHeaderLabels(
@@ -176,6 +189,7 @@ class MainWindow(QMainWindow):
         self.pending_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.pending_table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.pending_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.pending_table.setAlternatingRowColors(True)
         self.pending_table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeToContents
         )
@@ -183,9 +197,13 @@ class MainWindow(QMainWindow):
         pending_layout.addWidget(self.pending_table)
         pending_buttons = QHBoxLayout()
         self.retry_button = QPushButton("Reintentar envío completo")
+        self.retry_button.setObjectName("primaryButton")
+        self.export_pending_button = QPushButton("Exportar DICOM a carpeta")
+        self.export_pending_button.setObjectName("secondaryButton")
         self.refresh_pending_button = QPushButton("Actualizar")
         pending_buttons.addStretch()
         pending_buttons.addWidget(self.retry_button)
+        pending_buttons.addWidget(self.export_pending_button)
         pending_buttons.addWidget(self.refresh_pending_button)
         pending_layout.addLayout(pending_buttons)
         layout.addWidget(pending_box, 2)
@@ -193,24 +211,28 @@ class MainWindow(QMainWindow):
 
     def _build_worklist_page(self) -> QWidget:
         page = QWidget()
+        page.setObjectName("page")
         layout = QVBoxLayout(page)
+        layout.setContentsMargins(30, 26, 30, 26)
+        layout.setSpacing(14)
         header = QHBoxLayout()
-        self.worklist_back_button = QPushButton("← Menú principal")
+        self.worklist_back_button = QPushButton("Menú principal")
+        self.worklist_back_button.setObjectName("navigationButton")
         title = QLabel("Worklist y selección del estudio")
-        title.setStyleSheet("font-size: 24px; font-weight: 600;")
+        title.setObjectName("pageTitle")
         header.addWidget(self.worklist_back_button)
         header.addWidget(title)
         header.addStretch()
-        header.addWidget(QLabel("Pasos 1 y 2 de 3"))
         layout.addLayout(header)
         hint = QLabel(
-            "Busque el turno, verifique los datos del paciente y luego pulse "
-            "“Iniciar estudio seleccionado”."
+            "Busque el turno o cargue un paciente manualmente, verifique los datos "
+            "y luego pulse “Iniciar estudio seleccionado”."
         )
         hint.setWordWrap(True)
+        hint.setObjectName("supportingText")
         layout.addWidget(hint)
         self.worklist_view = WorklistView()
-        self.worklist_view.select_button.setText("Iniciar estudio seleccionado →")
+        self.worklist_view.select_button.setText("Iniciar estudio seleccionado")
         self.worklist_view.select_button.setMinimumHeight(44)
         layout.addWidget(self.worklist_view, 1)
         return page
@@ -228,11 +250,21 @@ class MainWindow(QMainWindow):
         self.configuration_view.devices_requested.connect(self._diagnose_devices)
         self.worklist_view.search_requested.connect(self._search_worklist)
         self.worklist_view.selection_requested.connect(self._select_study)
+        self.worklist_view.manual_patient_added.connect(
+            lambda item: self.statusBar().showMessage(
+                f"Paciente {item.patient_id} agregado manualmente a la Worklist",
+                8000,
+            )
+        )
         self.capture_view.back_requested.connect(self._show_worklist)
         self.capture_view.start_requested.connect(self._start_recording)
         self.capture_view.snapshot_requested.connect(self._create_live_snapshot)
         self.capture_view.finish_requested.connect(self._finish_and_send)
+        self.capture_view.local_export_requested.connect(
+            self._finish_and_export_local
+        )
         self.retry_button.clicked.connect(self._retry_selected)
+        self.export_pending_button.clicked.connect(self._export_pending_selected)
         self.refresh_pending_button.clicked.connect(self.refresh_pending)
 
     def _install_bridges(self) -> None:
@@ -452,6 +484,23 @@ class MainWindow(QMainWindow):
             on_error=self._reload_current_capture,
         )
 
+    def _finish_and_export_local(self) -> None:
+        if self.current_capture is None:
+            return
+        destination = self._choose_export_directory()
+        if destination is None:
+            return
+        capture_id = self.current_capture.id
+        self._capture_busy = True
+        self._sync_capture_state("Finalizando video y preparando la exportación DICOM…")
+        self._run_async(
+            lambda: self._finalize_local_export(capture_id, destination),
+            self._local_capture_export_completed,
+            description="Finalizar y exportar estudio",
+            on_finished=self._capture_task_finished,
+            on_error=self._reload_current_capture,
+        )
+
     def _finalize_batch(
         self, capture_id: int
     ) -> tuple[BatchDicomCreationOutcome, BatchExportOutcome]:
@@ -459,24 +508,25 @@ class MainWindow(QMainWindow):
         export_outcome = self.export_service.send_capture_images(capture_id)
         return dicom_outcome, export_outcome
 
+    def _finalize_local_export(
+        self, capture_id: int, destination: Path
+    ) -> tuple[BatchDicomCreationOutcome, FolderExportOutcome]:
+        dicom_outcome = self.study_service.finalize_dicom_images(capture_id)
+        export_outcome = self.export_service.export_capture_images(
+            capture_id, destination
+        )
+        return dicom_outcome, export_outcome
+
     def _batch_completed(
         self, outcome: tuple[BatchDicomCreationOutcome, BatchExportOutcome]
     ) -> None:
         dicom_outcome, export_outcome = outcome
         self.current_capture = self.database.get_capture(export_outcome.capture_id)
-        warnings = [
-            warning for build in dicom_outcome.builds for warning in build.warnings
-        ]
         self.capture_view.mark_finished(
             "Estudio finalizado" if export_outcome.success else "Envío pendiente"
         )
         self.refresh_pending()
-        if warnings:
-            QMessageBox.warning(
-                self,
-                "DICOM creado con advertencias",
-                "\n".join(dict.fromkeys(warnings)),
-            )
+        self._show_dicom_warnings(dicom_outcome)
         if export_outcome.success:
             QMessageBox.information(self, "Estudio finalizado", export_outcome.message)
         else:
@@ -485,19 +535,51 @@ class MainWindow(QMainWindow):
         self.current_capture = None
         self._show_home()
 
+    def _local_capture_export_completed(
+        self, outcome: tuple[BatchDicomCreationOutcome, FolderExportOutcome]
+    ) -> None:
+        dicom_outcome, export_outcome = outcome
+        self.current_capture = self.database.get_capture(export_outcome.capture_id)
+        self.capture_view.mark_finished("Estudio exportado")
+        self.refresh_pending()
+        self._show_dicom_warnings(dicom_outcome)
+        QMessageBox.information(
+            self,
+            "Exportación DICOM finalizada",
+            export_outcome.message
+            + "\n\nEl estudio seguirá disponible para enviarlo al PACS.",
+        )
+        self.selected_study = None
+        self.current_capture = None
+        self._show_home()
+
     def _retry_selected(self) -> None:
-        row = self.pending_table.currentRow()
-        item = self.pending_table.item(row, 0) if row >= 0 else None
-        if item is None:
-            QMessageBox.warning(self, "Reintento", "Seleccione una sesión pendiente.")
+        capture_id = self._selected_pending_capture_id("Reintento")
+        if capture_id is None:
             return
-        capture_id = int(item.data(Qt.UserRole))
         self.retry_button.setEnabled(False)
         self._run_async(
             lambda: self.export_service.retry_capture(capture_id),
             self._retry_completed,
             description="Reintentar envío",
             on_finished=lambda: self.retry_button.setEnabled(True),
+        )
+
+    def _export_pending_selected(self) -> None:
+        capture_id = self._selected_pending_capture_id("Exportación DICOM")
+        if capture_id is None:
+            return
+        destination = self._choose_export_directory()
+        if destination is None:
+            return
+        self.export_pending_button.setEnabled(False)
+        self._run_async(
+            lambda: self.export_service.export_capture_images(
+                capture_id, destination
+            ),
+            self._pending_folder_export_completed,
+            description="Exportar DICOM a carpeta",
+            on_finished=lambda: self.export_pending_button.setEnabled(True),
         )
 
     def _retry_completed(self, outcome: ExportOutcome | BatchExportOutcome) -> None:
@@ -512,6 +594,46 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "PACS", outcome.message)
         else:
             QMessageBox.critical(self, "PACS", outcome.message)
+
+    def _pending_folder_export_completed(
+        self, outcome: FolderExportOutcome
+    ) -> None:
+        QMessageBox.information(
+            self, "Exportación DICOM finalizada", outcome.message
+        )
+        self.statusBar().showMessage(
+            f"Estudio exportado en {outcome.directory}", 10000
+        )
+
+    def _selected_pending_capture_id(self, title: str) -> int | None:
+        row = self.pending_table.currentRow()
+        item = self.pending_table.item(row, 0) if row >= 0 else None
+        if item is None:
+            QMessageBox.warning(self, title, "Seleccione una sesión pendiente.")
+            return None
+        return int(item.data(Qt.UserRole))
+
+    def _choose_export_directory(self) -> Path | None:
+        selected = QFileDialog.getExistingDirectory(
+            self,
+            "Seleccionar carpeta o unidad para exportar",
+            "",
+            QFileDialog.ShowDirsOnly,
+        )
+        return Path(selected) if selected else None
+
+    def _show_dicom_warnings(
+        self, outcome: BatchDicomCreationOutcome
+    ) -> None:
+        warnings = [
+            warning for build in outcome.builds for warning in build.warnings
+        ]
+        if warnings:
+            QMessageBox.warning(
+                self,
+                "DICOM creado con advertencias",
+                "\n".join(dict.fromkeys(warnings)),
+            )
 
     def refresh_pending(self) -> None:
         if not hasattr(self, "pending_table"):

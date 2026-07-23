@@ -41,7 +41,7 @@ def test_export_service_sends_capture_images_as_one_batch(tmp_path: Path) -> Non
     )
     capture = database.create_capture(study.id, tmp_path / "video.mp4")
     builder = DicomBuilder(
-        InstitutionConfig("Test", "COLPO", "Custom", "MVP", "0.1")
+        InstitutionConfig("Test", "COLPO", "Custom", "ElectroCap", "1.0")
     )
     series_uid = "1.2.826.0.1.3680043.8.498.401"
     for number, color in ((1, "red"), (2, "blue")):
@@ -85,4 +85,3 @@ def test_export_service_sends_capture_images_as_one_batch(tmp_path: Path) -> Non
     )
     assert database.table_count("dicom_exports") == 2
     assert database.list_pending_captures() == []
-

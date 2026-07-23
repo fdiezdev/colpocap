@@ -1,6 +1,6 @@
 """Development-only DICOM Modality Worklist SCP backed by a JSON file.
 
-This server is intentionally small and deterministic.  It lets ColpoCap exercise
+This server is intentionally small and deterministic.  It lets ElectroCap exercise
 the same C-FIND workflow used against an institutional MWL without making
 Orthanc responsible for appointments.
 """
@@ -152,7 +152,7 @@ def _matches_text(candidate: str, expression: str, *, is_date: bool = False) -> 
 
 
 def dataset_matches_query(candidate: Dataset, query: Dataset) -> bool:
-    """Apply the common MWL matching keys used by ColpoCap and findscu."""
+    """Apply the common MWL matching keys used by ElectroCap and findscu."""
 
     for dicom_keyword in TOP_LEVEL_FIELDS:
         expression = _text(getattr(query, dicom_keyword, ""))
@@ -186,10 +186,10 @@ class MwlServer:
         self,
         repository: JsonWorklistRepository,
         *,
-        ae_title: str = "COLPOCAP_WL",
+        ae_title: str = "ELECTROCAP_WL",
         host: str = "127.0.0.1",
         port: int = 11112,
-        allowed_calling_aes: Iterable[str] = ("COLPOCAP_MVP",),
+        allowed_calling_aes: Iterable[str] = ("ELECTROCAP",),
     ) -> None:
         if not ae_title or len(ae_title) > 16:
             raise ValueError("El AE Title del servidor debe tener entre 1 y 16 caracteres.")
@@ -276,17 +276,17 @@ class MwlServer:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Servidor DICOM MWL local para desarrollo de ColpoCap."
+        description="Servidor DICOM MWL local para desarrollo de ElectroCap."
     )
     parser.add_argument("--data", type=Path, default=DEFAULT_DATA_PATH)
-    parser.add_argument("--ae-title", default="COLPOCAP_WL")
+    parser.add_argument("--ae-title", default="ELECTROCAP_WL")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=11112)
     parser.add_argument(
         "--allow-calling-ae",
         action="append",
         dest="allowed_calling_aes",
-        help="Calling AE permitido; puede repetirse. Por defecto: COLPOCAP_MVP.",
+        help="Calling AE permitido; puede repetirse. Por defecto: ELECTROCAP.",
     )
     parser.add_argument(
         "--log-level",
@@ -307,7 +307,7 @@ def main(argv: list[str] | None = None) -> int:
         ae_title=args.ae_title,
         host=args.host,
         port=args.port,
-        allowed_calling_aes=args.allowed_calling_aes or ("COLPOCAP_MVP",),
+        allowed_calling_aes=args.allowed_calling_aes or ("ELECTROCAP",),
     )
     try:
         server.start()

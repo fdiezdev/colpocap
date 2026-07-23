@@ -15,7 +15,7 @@ def study_values() -> dict[str, str]:
         "requested_procedure_id": "RP-1",
         "requested_procedure_description": "Colposcopía",
         "referring_physician_name": "MEDICO^REFERENTE",
-        "scheduled_station_ae_title": "COLPOCAP_MVP",
+        "scheduled_station_ae_title": "ELECTROCAP",
         "modality": "ES",
         "scheduled_performing_physician_name": "MEDICO^OPERADOR",
         "scheduled_procedure_step_description": "Colposcopía programada",

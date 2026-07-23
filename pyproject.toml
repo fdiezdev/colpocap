@@ -1,6 +1,6 @@
 [project]
-name = "colpocap-mvp"
-version = "0.1.0"
+name = "electrocap"
+version = "1.0.0"
 description = "Desktop capture station for colposcopy, DICOM MWL and PACS"
 requires-python = ">=3.11"
 dependencies = [
@@ -16,4 +16,3 @@ test = ["pytest>=8.0,<10"]
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = ["tests"]
-

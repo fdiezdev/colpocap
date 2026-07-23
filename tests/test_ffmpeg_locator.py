@@ -57,13 +57,13 @@ def test_environment_override_has_priority_over_bundled(tmp_path: Path) -> None:
     installation = locate_ffmpeg(
         system="Windows",
         project_root=tmp_path,
-        environ={"COLPOCAP_FFMPEG": f'"{configured}"'},
+        environ={"ELECTROCAP_FFMPEG": f'"{configured}"'},
         path_lookup=lambda _: None,
         run_command=_valid_runner,
     )
 
     assert installation.executable == configured.resolve()
-    assert installation.source == "variable COLPOCAP_FFMPEG"
+    assert installation.source == "variable ELECTROCAP_FFMPEG"
 
 
 def test_explicit_path_has_priority_over_environment(tmp_path: Path) -> None:
@@ -74,7 +74,7 @@ def test_explicit_path_has_priority_over_environment(tmp_path: Path) -> None:
         explicit,
         system="Windows",
         project_root=tmp_path,
-        environ={"COLPOCAP_FFMPEG": str(configured)},
+        environ={"ELECTROCAP_FFMPEG": str(configured)},
         path_lookup=lambda _: None,
         run_command=_valid_runner,
     )
