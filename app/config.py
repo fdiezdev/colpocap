@@ -85,6 +85,62 @@ class Settings:
             directory.mkdir(parents=True, exist_ok=True)
 
 
+def save_runtime_settings(
+    current: Settings,
+    *,
+    local_ae_title: str,
+    worklist: DicomEndpointConfig,
+    pacs: DicomEndpointConfig,
+    video: VideoConfig,
+) -> Settings:
+    """Persist editable connection/video settings and return validated settings.
+
+    Institution and storage values are intentionally preserved: this screen is
+    for operational connectivity and capture setup, not for relocating the
+    clinical archive while the application is running.
+    """
+    try:
+        raw = json.loads(current.config_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ConfigurationError(
+            f"No se pudo actualizar {current.config_path}: {exc}"
+        ) from exc
+    data = dict(_mapping(raw, "raíz"))
+    data["local_ae_title"] = local_ae_title.strip()
+    data["worklist"] = {
+        "ae_title": worklist.ae_title.strip(),
+        "host": worklist.host.strip(),
+        "port": worklist.port,
+    }
+    data["pacs"] = {
+        "ae_title": pacs.ae_title.strip(),
+        "host": pacs.host.strip(),
+        "port": pacs.port,
+    }
+    data["video"] = {
+        "device_name": video.device_name.strip(),
+        "resolution": video.resolution.strip(),
+        "fps": video.fps,
+        "bitrate": video.bitrate.strip(),
+    }
+
+    # Validate through the same loader before replacing the active file.
+    temporary = current.config_path.with_suffix(current.config_path.suffix + ".tmp")
+    try:
+        temporary.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        validated = load_settings(temporary)
+        temporary.replace(current.config_path)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+    # Reload using the real path so project-root and log-path semantics stay
+    # identical to application startup.
+    return load_settings(current.config_path)
+
+
 def _mapping(value: Any, key: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise ConfigurationError(f"La sección '{key}' debe ser un objeto JSON.")
@@ -189,4 +245,3 @@ def load_settings(path: str | Path | None = None) -> Settings:
         config_path=config_path,
         project_root=project_root,
     )
-

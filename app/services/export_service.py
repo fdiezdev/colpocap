@@ -9,7 +9,7 @@ from pathlib import Path
 from pydicom import dcmread
 
 from app.db.database import Database
-from app.db.models import ExportRecord, WorkflowStatus
+from app.db.models import CaptureImageRecord, ExportRecord, WorkflowStatus
 from app.dicom.store_client import EchoResult, StoreClient, StoreError, StoreResult
 
 LOGGER = logging.getLogger(__name__)
@@ -23,6 +23,17 @@ class ExportWorkflowError(RuntimeError):
 class ExportOutcome:
     export: ExportRecord
     store_result: StoreResult | None
+    message: str
+
+
+@dataclass(frozen=True)
+class BatchExportOutcome:
+    capture_id: int
+    exports: tuple[ExportRecord, ...]
+    store_results: tuple[StoreResult, ...]
+    sent_count: int
+    total_count: int
+    success: bool
     message: str
 
 
@@ -90,7 +101,136 @@ class ExportService:
             )
             return ExportOutcome(completed, None, f"Envío fallido: {exc}")
 
-    def retry_capture(self, capture_id: int) -> ExportOutcome:
-        LOGGER.info("Reintentando exportación de captura %s", capture_id)
-        return self.send_capture(capture_id)
+    def send_capture_images(self, capture_id: int) -> BatchExportOutcome:
+        """Send all unsent images from a capture in one C-STORE association."""
+        capture = self.database.get_capture(capture_id)
+        all_images = self.database.list_capture_images(capture_id)
+        images = [
+            image
+            for image in all_images
+            if image.dicom_image_path and image.status != WorkflowStatus.SENT
+        ]
+        if not images:
+            if all_images and all(
+                image.status == WorkflowStatus.SENT for image in all_images
+            ):
+                return BatchExportOutcome(
+                    capture_id,
+                    (),
+                    (),
+                    len(all_images),
+                    len(all_images),
+                    True,
+                    "Todas las imágenes de este estudio ya fueron enviadas.",
+                )
+            raise ExportWorkflowError(
+                "No hay imágenes DICOM preparadas para enviar en este estudio."
+            )
 
+        paths: list[Path] = []
+        attempts: list[tuple[CaptureImageRecord, ExportRecord]] = []
+        endpoint = self.store_client.endpoint
+        for image in images:
+            path = Path(str(image.dicom_image_path))
+            if not path.is_file():
+                raise ExportWorkflowError(f"No existe el DICOM registrado: {path}")
+            try:
+                dataset = dcmread(path, stop_before_pixels=True)
+                sop_instance_uid = str(dataset.SOPInstanceUID)
+                sop_class_uid = str(dataset.SOPClassUID)
+            except Exception as exc:
+                raise ExportWorkflowError(
+                    f"El DICOM no puede abrirse antes del envío: {exc}"
+                ) from exc
+            export = self.database.create_export(
+                capture_id=capture_id,
+                image_id=image.id,
+                sop_instance_uid=sop_instance_uid,
+                sop_class_uid=sop_class_uid,
+                destination_ae=endpoint.ae_title,
+                destination_host=endpoint.host,
+                destination_port=endpoint.port,
+            )
+            attempts.append((image, export))
+            paths.append(path)
+
+        completed_exports: list[ExportRecord] = []
+        try:
+            echo = self.store_client.echo()
+            if not echo.success:
+                raise StoreError(f"C-ECHO previo falló: {echo.message}")
+            results = self.store_client.store_many(paths)
+            for (image, export), result in zip(attempts, results, strict=True):
+                accepted = result.success or result.warning
+                status = WorkflowStatus.SENT if accepted else WorkflowStatus.FAILED
+                completed_exports.append(
+                    self.database.complete_export(
+                        export.id,
+                        status=status,
+                        response_status=result.status_hex,
+                        error_message=None if accepted else result.message,
+                    )
+                )
+                self.database.update_capture_image(image.id, status=status)
+        except Exception as exc:
+            LOGGER.exception("Falló el envío por lote de captura %s", capture_id)
+            completed_ids = {export.id for export in completed_exports}
+            for image, export in attempts:
+                if export.id in completed_ids:
+                    continue
+                completed_exports.append(
+                    self.database.complete_export(
+                        export.id,
+                        status=WorkflowStatus.FAILED,
+                        response_status=None,
+                        error_message=str(exc),
+                    )
+                )
+                self.database.update_capture_image(
+                    image.id, status=WorkflowStatus.FAILED
+                )
+            self.database.update_capture(capture_id, status=WorkflowStatus.FAILED)
+            self.database.update_study_status(
+                capture.study_id, WorkflowStatus.FAILED
+            )
+            sent_count = sum(
+                image.status == WorkflowStatus.SENT
+                for image in self.database.list_capture_images(capture_id)
+            )
+            return BatchExportOutcome(
+                capture_id,
+                tuple(completed_exports),
+                (),
+                sent_count,
+                len(all_images),
+                False,
+                f"Envío del estudio fallido: {exc}",
+            )
+
+        refreshed = self.database.list_capture_images(capture_id)
+        sent_count = sum(image.status == WorkflowStatus.SENT for image in refreshed)
+        success = sent_count == len(refreshed)
+        final_status = WorkflowStatus.SENT if success else WorkflowStatus.FAILED
+        self.database.update_capture(capture_id, status=final_status)
+        self.database.update_study_status(capture.study_id, final_status)
+        message = (
+            f"Estudio enviado: {sent_count} de {len(refreshed)} imágenes aceptadas "
+            "por el PACS en un único envío."
+            if success
+            else f"Envío incompleto: {sent_count} de {len(refreshed)} imágenes aceptadas."
+        )
+        return BatchExportOutcome(
+            capture_id,
+            tuple(completed_exports),
+            results,
+            sent_count,
+            len(refreshed),
+            success,
+            message,
+        )
+
+    def retry_capture(self, capture_id: int) -> ExportOutcome | BatchExportOutcome:
+        LOGGER.info("Reintentando exportación de captura %s", capture_id)
+        if self.database.list_capture_images(capture_id):
+            return self.send_capture_images(capture_id)
+        return self.send_capture(capture_id)

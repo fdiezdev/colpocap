@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 
 from pydicom import dcmread
+from pydicom.dataset import Dataset
 from pynetdicom import AE
 from pynetdicom.sop_class import Verification
 
@@ -73,21 +74,35 @@ class StoreClient:
             association.release()
 
     def store(self, dicom_path: str | Path) -> StoreResult:
-        path = Path(dicom_path)
-        if not path.is_file():
-            raise StoreError(f"No existe el archivo DICOM: {path}")
-        try:
-            dataset = dcmread(path)
-            sop_class_uid = str(dataset.SOPClassUID)
-        except Exception as exc:
-            raise StoreError(f"No se pudo abrir el DICOM {path}: {exc}") from exc
+        return self.store_many((dicom_path,))[0]
+
+    def store_many(
+        self, dicom_paths: tuple[str | Path, ...] | list[str | Path]
+    ) -> tuple[StoreResult, ...]:
+        """Send every instance through one DICOM association."""
+        if not dicom_paths:
+            raise StoreError("No se recibieron archivos DICOM para enviar.")
+        loaded: list[tuple[Path, Dataset]] = []
+        for dicom_path in dicom_paths:
+            path = Path(dicom_path)
+            if not path.is_file():
+                raise StoreError(f"No existe el archivo DICOM: {path}")
+            try:
+                dataset = dcmread(path)
+                str(dataset.SOPClassUID)
+            except Exception as exc:
+                raise StoreError(f"No se pudo abrir el DICOM {path}: {exc}") from exc
+            loaded.append((path, dataset))
 
         ae = AE(ae_title=self.local_ae_title)
-        ae.add_requested_context(sop_class_uid)
+        for sop_class_uid in dict.fromkeys(
+            str(dataset.SOPClassUID) for _, dataset in loaded
+        ):
+            ae.add_requested_context(sop_class_uid)
         self._configure_timeouts(ae)
         LOGGER.info(
-            "Intentando C-STORE de %s a %s@%s:%s",
-            path,
+            "Intentando lote C-STORE de %s instancia(s) a %s@%s:%s",
+            len(loaded),
             self.endpoint.ae_title,
             self.endpoint.host,
             self.endpoint.port,
@@ -100,27 +115,31 @@ class StoreClient:
         if not association.is_established:
             raise StoreError("El PACS rechazó o no estableció la asociación DICOM.")
         try:
-            response = association.send_c_store(dataset)
-            if response is None or not hasattr(response, "Status"):
-                raise StoreError("C-STORE no devolvió un status DICOM.")
-            code = int(response.Status)
-            warning = 0xB000 <= code <= 0xBFFF
-            success = code == 0x0000
-            status_hex = self._hex(code)
-            if success:
-                message = f"C-STORE exitoso, respuesta {status_hex}."
-                LOGGER.info(message)
-            elif warning:
-                message = f"C-STORE almacenado con advertencia {status_hex}."
-                LOGGER.warning(message)
-            else:
-                message = f"C-STORE falló con respuesta {status_hex}."
-                LOGGER.error(message)
-            return StoreResult(code, status_hex, success, warning, message)
+            results: list[StoreResult] = []
+            for path, dataset in loaded:
+                response = association.send_c_store(dataset)
+                if response is None or not hasattr(response, "Status"):
+                    raise StoreError(f"C-STORE no devolvió status para {path.name}.")
+                code = int(response.Status)
+                warning = 0xB000 <= code <= 0xBFFF
+                success = code == 0x0000
+                status_hex = self._hex(code)
+                if success:
+                    message = f"C-STORE exitoso, respuesta {status_hex}."
+                    LOGGER.info("%s: %s", path.name, message)
+                elif warning:
+                    message = f"C-STORE almacenado con advertencia {status_hex}."
+                    LOGGER.warning("%s: %s", path.name, message)
+                else:
+                    message = f"C-STORE falló con respuesta {status_hex}."
+                    LOGGER.error("%s: %s", path.name, message)
+                results.append(
+                    StoreResult(code, status_hex, success, warning, message)
+                )
+            return tuple(results)
         finally:
             association.release()
 
     @staticmethod
     def _hex(code: int | None) -> str:
         return "sin status" if code is None else f"0x{code:04X}"
-

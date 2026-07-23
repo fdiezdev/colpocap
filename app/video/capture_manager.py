@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 import re
 import unicodedata
+from typing import Callable
 
 from app.config import VideoConfig
 from .ffmpeg_manager import DeviceDiagnostic, FFmpegManager
@@ -52,8 +53,12 @@ class CaptureManager:
         )
         return self.videos_dir / f"{filename}.mp4"
 
-    def start(self, output_path: str | Path) -> Path:
-        return self.ffmpeg.start_recording(output_path)
+    def start(
+        self,
+        output_path: str | Path,
+        preview_callback: Callable[[bytes], None] | None = None,
+    ) -> Path:
+        return self.ffmpeg.start_recording(output_path, preview_callback)
 
     def stop(self) -> Path:
         return self.ffmpeg.stop_recording()

@@ -54,6 +54,7 @@ class DicomBuilder:
         output_path: str | Path,
         metadata: Mapping[str, Any],
         instance_number: int = 1,
+        series_instance_uid: str | None = None,
         now: datetime | None = None,
     ) -> DicomBuildResult:
         """Create and re-open an uncompressed RGB VL Endoscopic DICOM instance."""
@@ -87,7 +88,9 @@ class DicomBuilder:
                 warnings,
                 f"StudyInstanceUID {reason}; se generó uno nuevo: {study_uid}",
             )
-        series_uid = new_series_instance_uid()
+        series_uid = series_instance_uid or new_series_instance_uid()
+        if not is_valid_uid(series_uid):
+            raise DicomBuildError("SeriesInstanceUID provisto es inválido.")
         sop_uid = new_sop_instance_uid()
 
         acquisition_time = now or datetime.now().astimezone()

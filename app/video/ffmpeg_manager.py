@@ -7,8 +7,9 @@ import logging
 from pathlib import Path
 import platform
 import subprocess
+import threading
 import time
-from typing import IO
+from typing import Callable, IO
 
 from app.config import VideoConfig
 from .ffmpeg_locator import FFmpegInstallation, FFmpegLocatorError, locate_ffmpeg
@@ -33,10 +34,12 @@ class FFmpegManager:
         self.config = config
         self.executable = executable
         self._installation: FFmpegInstallation | None = None
-        self._process: subprocess.Popen[str] | None = None
+        self._process: subprocess.Popen[bytes] | None = None
         self._log_handle: IO[str] | None = None
         self._current_output: Path | None = None
         self._current_log: Path | None = None
+        self._preview_thread: threading.Thread | None = None
+        self._preview_callback: Callable[[bytes], None] | None = None
 
     def check_installed(self) -> Path:
         if self._installation is None:
@@ -50,7 +53,11 @@ class FFmpegManager:
     def is_recording(self) -> bool:
         return self._process is not None and self._process.poll() is None
 
-    def start_recording(self, output_path: str | Path) -> Path:
+    def start_recording(
+        self,
+        output_path: str | Path,
+        preview_callback: Callable[[bytes], None] | None = None,
+    ) -> Path:
         if self.is_recording:
             raise FFmpegError("Ya existe una grabación FFmpeg en curso.")
         executable = self.check_installed()
@@ -61,7 +68,9 @@ class FFmpegManager:
 
         output = Path(output_path)
         output.parent.mkdir(parents=True, exist_ok=True)
-        command = self._capture_command(output, executable)
+        command = self._capture_command(
+            output, executable, with_preview=preview_callback is not None
+        )
         log_path = output.with_suffix(".ffmpeg.log")
         self._log_handle = log_path.open("a", encoding="utf-8")
         creation_flags = (
@@ -75,10 +84,8 @@ class FFmpegManager:
             self._process = subprocess.Popen(
                 command,
                 stdin=subprocess.PIPE,
-                stdout=subprocess.DEVNULL,
+                stdout=subprocess.PIPE if preview_callback is not None else subprocess.DEVNULL,
                 stderr=self._log_handle,
-                text=True,
-                encoding="utf-8",
                 creationflags=creation_flags,
             )
         except OSError as exc:
@@ -95,6 +102,15 @@ class FFmpegManager:
                 f"FFmpeg terminó al iniciar (código {code}). "
                 f"Revise el dispositivo y el log {log_path}."
             )
+        if preview_callback is not None:
+            self._preview_callback = preview_callback
+            self._preview_thread = threading.Thread(
+                target=self._read_preview_frames,
+                args=(self._process,),
+                name="colpocap-preview",
+                daemon=True,
+            )
+            self._preview_thread.start()
         LOGGER.info("Grabación iniciada: %s", output)
         return output
 
@@ -106,7 +122,7 @@ class FFmpegManager:
         forced = False
         try:
             if process.poll() is None and process.stdin is not None:
-                process.stdin.write("q\n")
+                process.stdin.write(b"q\n")
                 process.stdin.flush()
             try:
                 return_code = process.wait(timeout=timeout_seconds)
@@ -122,6 +138,13 @@ class FFmpegManager:
         finally:
             if process.stdin is not None:
                 process.stdin.close()
+            if process.stdout is not None:
+                process.stdout.close()
+            preview_thread = self._preview_thread
+            if preview_thread is not None and preview_thread.is_alive():
+                preview_thread.join(timeout=2)
+            self._preview_thread = None
+            self._preview_callback = None
             self._close_log()
             self._process = None
             self._current_output = None
@@ -186,7 +209,9 @@ class FFmpegManager:
             installation.version if installation is not None else "",
         )
 
-    def _capture_command(self, output: Path, executable: Path) -> list[str]:
+    def _capture_command(
+        self, output: Path, executable: Path, *, with_preview: bool = False
+    ) -> list[str]:
         common_output = [
             "-c:v",
             "libx264",
@@ -235,7 +260,66 @@ class FFmpegManager:
                 "-i",
                 self.config.device_name,
             ]
-        return [str(executable), "-hide_banner", *input_args, *common_output]
+        preview_output = (
+            [
+                "-map",
+                "0:v:0",
+                "-vf",
+                "fps=10",
+                "-c:v",
+                "mjpeg",
+                "-q:v",
+                "4",
+                "-f",
+                "image2pipe",
+                "pipe:1",
+            ]
+            if with_preview
+            else []
+        )
+        return [
+            str(executable),
+            "-hide_banner",
+            *input_args,
+            "-map",
+            "0:v:0",
+            *common_output,
+            *preview_output,
+        ]
+
+    def _read_preview_frames(self, process: subprocess.Popen[bytes]) -> None:
+        stream = process.stdout
+        if stream is None:
+            return
+        buffer = bytearray()
+        try:
+            while True:
+                chunk = stream.read(64 * 1024)
+                if not chunk:
+                    break
+                buffer.extend(chunk)
+                while True:
+                    start = buffer.find(b"\xff\xd8")
+                    if start < 0:
+                        if len(buffer) > 2:
+                            del buffer[:-2]
+                        break
+                    end = buffer.find(b"\xff\xd9", start + 2)
+                    if end < 0:
+                        if start:
+                            del buffer[:start]
+                        break
+                    frame = bytes(buffer[start : end + 2])
+                    del buffer[: end + 2]
+                    callback = self._preview_callback
+                    if callback is not None:
+                        try:
+                            callback(frame)
+                        except Exception:
+                            LOGGER.exception("La UI rechazó un frame de preview")
+        except (OSError, ValueError):
+            if process.poll() is None:
+                LOGGER.exception("Se interrumpió el preview de cámara")
 
     def _close_log(self) -> None:
         if self._log_handle is not None:

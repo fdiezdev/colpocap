@@ -5,12 +5,13 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 import logging
 from pathlib import Path
+from typing import Callable
 from uuid import uuid4
 
 from app.db.database import Database, local_timestamp
-from app.db.models import CaptureRecord, StudyRecord, WorkflowStatus
+from app.db.models import CaptureImageRecord, CaptureRecord, StudyRecord, WorkflowStatus
 from app.dicom.dicom_builder import DicomBuildResult, DicomBuilder
-from app.dicom.uid import is_valid_uid, new_study_instance_uid
+from app.dicom.uid import is_valid_uid, new_series_instance_uid, new_study_instance_uid
 from app.dicom.worklist_client import WorklistItem
 from app.video.capture_manager import CaptureManager
 from app.video.snapshot_manager import SnapshotManager
@@ -32,6 +33,13 @@ class StudySelection:
 class DicomCreationOutcome:
     capture: CaptureRecord
     build: DicomBuildResult
+
+
+@dataclass(frozen=True)
+class BatchDicomCreationOutcome:
+    capture: CaptureRecord
+    images: tuple[CaptureImageRecord, ...]
+    builds: tuple[DicomBuildResult, ...]
 
 
 class StudyService:
@@ -88,7 +96,11 @@ class StudyService:
         )
         return StudySelection(study, tuple(warnings))
 
-    def start_recording(self, study_id: int | None = None) -> CaptureRecord:
+    def start_recording(
+        self,
+        study_id: int | None = None,
+        preview_callback: Callable[[bytes], None] | None = None,
+    ) -> CaptureRecord:
         selected_id = study_id or self.selected_study_id
         if selected_id is None:
             raise StudyWorkflowError("Seleccione un estudio antes de iniciar la grabación.")
@@ -103,7 +115,7 @@ class StudyService:
         capture = self.database.create_capture(study.id, output_path)
         self.database.update_study_status(study.id, WorkflowStatus.RECORDING)
         try:
-            self.capture_manager.start(output_path)
+            self.capture_manager.start(output_path, preview_callback)
         except Exception:
             self._mark_failed(capture.id, study.id)
             LOGGER.exception("Falló el inicio de grabación para captura %s", capture.id)
@@ -157,6 +169,102 @@ class StudyService:
         except Exception:
             self._mark_failed(capture_id, capture.study_id)
             LOGGER.exception("Falló la extracción de snapshot para captura %s", capture_id)
+            raise
+
+    def create_live_snapshot(
+        self, capture_id: int, jpeg_data: bytes
+    ) -> CaptureImageRecord:
+        """Persist the exact latest frame displayed during an active study."""
+        capture = self.database.get_capture(capture_id)
+        if not self.capture_manager.is_recording:
+            raise StudyWorkflowError(
+                "La cámara no está activa. Inicie el estudio antes de capturar."
+            )
+        existing = self.database.list_capture_images(capture_id)
+        instance_number = len(existing) + 1
+        video_stem = Path(capture.video_path or f"capture_{capture.id}").stem
+        snapshot_path = self.snapshots_dir / (
+            f"{video_stem}_snapshot_{instance_number:03d}_{uuid4().hex[:8]}.jpg"
+        )
+        try:
+            created = self.snapshot_manager.save_live_frame(jpeg_data, snapshot_path)
+            image = self.database.create_capture_image(
+                capture_id=capture_id,
+                snapshot_path=created,
+                instance_number=instance_number,
+            )
+            # Keep legacy columns populated for compatibility with existing
+            # installations and recovery tooling; the normalized table is the
+            # source of truth for the new multi-image workflow.
+            self.database.update_capture(capture_id, snapshot_path=str(created))
+            LOGGER.info(
+                "Snapshot %s agregado a la captura %s", instance_number, capture_id
+            )
+            return image
+        except Exception:
+            LOGGER.exception("Falló el snapshot en vivo para captura %s", capture_id)
+            raise
+
+    def finalize_dicom_images(self, capture_id: int) -> BatchDicomCreationOutcome:
+        """Stop recording and create one coherent DICOM series for all snapshots."""
+        capture = self.database.get_capture(capture_id)
+        images = self.database.list_capture_images(capture_id)
+        if not images:
+            raise StudyWorkflowError(
+                "Capture al menos un snapshot antes de finalizar el estudio."
+            )
+        if self.capture_manager.is_recording:
+            capture = self.stop_recording(capture_id)
+
+        study = self.database.get_study(capture.study_id)
+        series_uid = new_series_instance_uid()
+        updated_images: list[CaptureImageRecord] = []
+        builds: list[DicomBuildResult] = []
+        try:
+            for image in images:
+                snapshot = Path(image.snapshot_path)
+                if not snapshot.is_file():
+                    raise StudyWorkflowError(
+                        f"No existe el snapshot {image.instance_number}: {snapshot}"
+                    )
+                destination = self.dicom_dir / (
+                    f"{snapshot.stem}_{uuid4().hex[:8]}.dcm"
+                )
+                build = self.dicom_builder.create_vl_endoscopic_image(
+                    snapshot_path=snapshot,
+                    output_path=destination,
+                    metadata=asdict(study),
+                    instance_number=image.instance_number,
+                    series_instance_uid=series_uid,
+                )
+                if build.study_instance_uid != study.study_instance_uid:
+                    self.database.update_study_instance_uid(
+                        study.id, build.study_instance_uid
+                    )
+                    study = self.database.get_study(study.id)
+                updated = self.database.update_capture_image(
+                    image.id,
+                    dicom_image_path=str(build.output_path),
+                    status=WorkflowStatus.DICOM_CREATED,
+                )
+                updated_images.append(updated)
+                builds.append(build)
+            capture = self.database.update_capture(
+                capture_id,
+                dicom_image_path=str(builds[-1].output_path),
+                status=WorkflowStatus.DICOM_CREATED,
+            )
+            self.database.update_study_status(
+                capture.study_id, WorkflowStatus.DICOM_CREATED
+            )
+            return BatchDicomCreationOutcome(
+                capture, tuple(updated_images), tuple(builds)
+            )
+        except Exception:
+            self._mark_failed(capture_id, capture.study_id, ended=True)
+            LOGGER.exception(
+                "Falló la creación del lote DICOM para captura %s", capture_id
+            )
             raise
 
     def create_dicom_image(self, capture_id: int) -> DicomCreationOutcome:

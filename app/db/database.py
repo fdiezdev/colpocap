@@ -8,7 +8,13 @@ from pathlib import Path
 import sqlite3
 from typing import Any, Mapping
 
-from .models import CaptureRecord, ExportRecord, StudyRecord, WorkflowStatus
+from .models import (
+    CaptureImageRecord,
+    CaptureRecord,
+    ExportRecord,
+    StudyRecord,
+    WorkflowStatus,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -83,7 +89,20 @@ class Database:
                     response_status TEXT,
                     attempted_at TEXT NOT NULL,
                     error_message TEXT,
+                    image_id INTEGER,
                     FOREIGN KEY (capture_id) REFERENCES captures(id)
+                );
+
+                CREATE TABLE IF NOT EXISTS capture_images (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    capture_id INTEGER NOT NULL,
+                    snapshot_path TEXT NOT NULL,
+                    dicom_image_path TEXT,
+                    instance_number INTEGER NOT NULL,
+                    captured_at TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    FOREIGN KEY (capture_id) REFERENCES captures(id),
+                    UNIQUE (capture_id, instance_number)
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_captures_study_id
@@ -92,8 +111,16 @@ class Database:
                     ON dicom_exports(capture_id);
                 CREATE INDEX IF NOT EXISTS idx_exports_status
                     ON dicom_exports(status);
+                CREATE INDEX IF NOT EXISTS idx_capture_images_capture_id
+                    ON capture_images(capture_id);
                 """
             )
+            export_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(dicom_exports)")
+            }
+            if "image_id" not in export_columns:
+                connection.execute("ALTER TABLE dicom_exports ADD COLUMN image_id INTEGER")
         LOGGER.info("Base SQLite inicializada en %s", self.path)
 
     def create_study(self, values: Mapping[str, Any]) -> StudyRecord:
@@ -207,6 +234,73 @@ class Database:
             raise LookupError(f"No existe la captura local {capture_id}.")
         return self.get_capture(capture_id)
 
+    def create_capture_image(
+        self,
+        *,
+        capture_id: int,
+        snapshot_path: str | Path,
+        instance_number: int,
+    ) -> CaptureImageRecord:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO capture_images (
+                    capture_id, snapshot_path, instance_number, captured_at, status
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    capture_id,
+                    str(snapshot_path),
+                    instance_number,
+                    local_timestamp(),
+                    WorkflowStatus.SNAPSHOT_CREATED.value,
+                ),
+            )
+            image_id = int(cursor.lastrowid)
+        return self.get_capture_image(image_id)
+
+    def get_capture_image(self, image_id: int) -> CaptureImageRecord:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM capture_images WHERE id = ?", (image_id,)
+            ).fetchone()
+        if row is None:
+            raise LookupError(f"No existe la imagen local {image_id}.")
+        return CaptureImageRecord.from_row(row)
+
+    def list_capture_images(self, capture_id: int) -> list[CaptureImageRecord]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM capture_images
+                WHERE capture_id = ?
+                ORDER BY instance_number, id
+                """,
+                (capture_id,),
+            ).fetchall()
+        return [CaptureImageRecord.from_row(row) for row in rows]
+
+    def update_capture_image(
+        self, image_id: int, **changes: Any
+    ) -> CaptureImageRecord:
+        allowed = {"snapshot_path", "dicom_image_path", "instance_number", "status"}
+        unknown = set(changes) - allowed
+        if unknown:
+            raise ValueError(f"Campos de imagen no permitidos: {sorted(unknown)}")
+        if not changes:
+            return self.get_capture_image(image_id)
+        if isinstance(changes.get("status"), WorkflowStatus):
+            changes["status"] = changes["status"].value
+        assignment = ", ".join(f"{key} = ?" for key in changes)
+        with self._connect() as connection:
+            cursor = connection.execute(
+                f"UPDATE capture_images SET {assignment} WHERE id = ?",
+                (*changes.values(), image_id),
+            )
+        if cursor.rowcount != 1:
+            raise LookupError(f"No existe la imagen local {image_id}.")
+        return self.get_capture_image(image_id)
+
     def create_export(
         self,
         *,
@@ -216,6 +310,7 @@ class Database:
         destination_ae: str,
         destination_host: str,
         destination_port: int,
+        image_id: int | None = None,
     ) -> ExportRecord:
         with self._connect() as connection:
             cursor = connection.execute(
@@ -223,8 +318,8 @@ class Database:
                 INSERT INTO dicom_exports (
                     capture_id, sop_instance_uid, sop_class_uid,
                     destination_ae, destination_host, destination_port,
-                    status, attempted_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    status, attempted_at, image_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     capture_id,
@@ -235,6 +330,7 @@ class Database:
                     destination_port,
                     "PENDING",
                     local_timestamp(),
+                    image_id,
                 ),
             )
             export_id = int(cursor.lastrowid)
@@ -271,7 +367,7 @@ class Database:
         return self.get_export(export_id)
 
     def list_pending_captures(self) -> list[dict[str, Any]]:
-        """Return captures with a DICOM file and no successful latest export."""
+        """Return capture sessions that still contain unsent DICOM images."""
         with self._connect() as connection:
             rows = connection.execute(
                 """
@@ -285,24 +381,42 @@ class Database:
                     de.status AS export_status,
                     de.response_status,
                     de.attempted_at,
-                    de.error_message
+                    de.error_message,
+                    COUNT(ci.id) AS image_count,
+                    SUM(CASE WHEN ci.status = 'SENT' THEN 1 ELSE 0 END) AS sent_count
                 FROM captures c
                 JOIN studies s ON s.id = c.study_id
+                LEFT JOIN capture_images ci ON ci.capture_id = c.id
                 LEFT JOIN dicom_exports de ON de.id = (
                     SELECT MAX(de2.id)
                     FROM dicom_exports de2
                     WHERE de2.capture_id = c.id
                 )
-                WHERE c.dicom_image_path IS NOT NULL
-                  AND COALESCE(de.status, c.status) <> ?
+                WHERE (
+                    EXISTS (
+                        SELECT 1 FROM capture_images pending_ci
+                        WHERE pending_ci.capture_id = c.id
+                          AND pending_ci.dicom_image_path IS NOT NULL
+                          AND pending_ci.status <> ?
+                    )
+                    OR (
+                        NOT EXISTS (
+                            SELECT 1 FROM capture_images any_ci
+                            WHERE any_ci.capture_id = c.id
+                        )
+                        AND c.dicom_image_path IS NOT NULL
+                        AND COALESCE(de.status, c.status) <> ?
+                    )
+                )
+                GROUP BY c.id
                 ORDER BY COALESCE(de.attempted_at, c.started_at) DESC
                 """,
-                (WorkflowStatus.SENT.value,),
+                (WorkflowStatus.SENT.value, WorkflowStatus.SENT.value),
             ).fetchall()
         return [dict(row) for row in rows]
 
     def table_count(self, table: str) -> int:
-        if table not in {"studies", "captures", "dicom_exports"}:
+        if table not in {"studies", "captures", "capture_images", "dicom_exports"}:
             raise ValueError("Tabla no permitida.")
         with self._connect() as connection:
             return int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])

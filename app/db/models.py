@@ -63,6 +63,21 @@ class CaptureRecord:
 
 
 @dataclass(frozen=True)
+class CaptureImageRecord:
+    id: int
+    capture_id: int
+    snapshot_path: str
+    dicom_image_path: str | None
+    instance_number: int
+    captured_at: str
+    status: str
+
+    @classmethod
+    def from_row(cls, row: Row | Mapping[str, Any]) -> "CaptureImageRecord":
+        return cls(**{field: row[field] for field in cls.__dataclass_fields__})
+
+
+@dataclass(frozen=True)
 class ExportRecord:
     id: int
     capture_id: int
@@ -75,6 +90,7 @@ class ExportRecord:
     response_status: str | None
     attempted_at: str
     error_message: str | None
+    image_id: int | None = None
 
     @classmethod
     def from_row(cls, row: Row | Mapping[str, Any]) -> "ExportRecord":

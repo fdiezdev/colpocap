@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import logging
+from io import BytesIO
 from pathlib import Path
 import subprocess
+
+from PIL import Image, UnidentifiedImageError
 
 from .ffmpeg_locator import FFmpegInstallation, FFmpegLocatorError, locate_ffmpeg
 
@@ -73,4 +76,30 @@ class SnapshotManager:
                 f"FFmpeg no pudo extraer el snapshot (código {completed.returncode}): {tail}"
             )
         LOGGER.info("Snapshot creado: %s", output)
+        return output
+
+    def save_live_frame(self, jpeg_data: bytes, output_path: str | Path) -> Path:
+        """Validate and persist the exact JPEG frame shown in the live preview."""
+        if not jpeg_data:
+            raise SnapshotError("La cámara todavía no entregó una imagen para capturar.")
+        try:
+            with Image.open(BytesIO(jpeg_data)) as image:
+                image.verify()
+                if image.format != "JPEG":
+                    raise SnapshotError("El frame de cámara recibido no es JPEG.")
+        except SnapshotError:
+            raise
+        except (OSError, UnidentifiedImageError) as exc:
+            raise SnapshotError(f"El frame de cámara no es una imagen válida: {exc}") from exc
+
+        output = Path(output_path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        temporary = output.with_suffix(output.suffix + ".tmp")
+        try:
+            temporary.write_bytes(jpeg_data)
+            temporary.replace(output)
+        except OSError as exc:
+            temporary.unlink(missing_ok=True)
+            raise SnapshotError(f"No se pudo guardar el snapshot {output}: {exc}") from exc
+        LOGGER.info("Snapshot en vivo creado: %s", output)
         return output
